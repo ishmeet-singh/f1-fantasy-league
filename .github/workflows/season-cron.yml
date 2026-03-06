@@ -1,0 +1,53 @@
+name: season-cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 min — reminders
+    - cron: "*/30 * * * *"   # every 30 min — sync results
+    - cron: "15 */6 * * *"   # every 6 hours — sync calendar
+    - cron: "45 * * * *"     # hourly — recompute scores
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send reminder emails (every 15 minutes)
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *' || github.event.schedule == '*/30 * * * *' }}
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_BASE_URL/api/cron/send-reminders"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      - name: Call sync-results (every 30 minutes)
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/30 * * * *' }}
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_BASE_URL/api/cron/sync-results"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      - name: Call sync-calendar (every 6 hours)
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '15 */6 * * *' }}
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_BASE_URL/api/cron/sync-calendar"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      - name: Call recompute (hourly)
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '45 * * * *' }}
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_BASE_URL/api/cron/recompute"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

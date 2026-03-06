@@ -1,0 +1,1 @@
+{"version":1,"functions":{"/api/admin/sync-calendar":{},"/api/admin/sync":{},"/api/admin/recompute":{},"/api/cron/recompute":{},"/api/cron/send-reminders":{},"/api/cron/sync-calendar":{},"/api/cron/sync-results":{},"/admin":{},"/picks":{},"/admin/picks":{},"/dashboard":{},"/results":{}}}
