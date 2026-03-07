@@ -1,10 +1,4 @@
-import { Resend } from "resend";
-
-function getResend() {
-  return new Resend(process.env.RESEND_API_KEY);
-}
-
-const FROM_ADDRESS = process.env.EMAIL_FROM || "F1 Friends League <noreply@resend.dev>";
+import nodemailer from "nodemailer";
 
 type EventType = "quali" | "sprint" | "race";
 
@@ -17,6 +11,22 @@ const EVENT_LABELS: Record<EventType, string> = {
 function formatTimeLabel(minutesLeft: number): string {
   if (minutesLeft >= 60) return `${Math.round(minutesLeft / 60)} hour${Math.round(minutesLeft / 60) === 1 ? "" : "s"}`;
   return `${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}`;
+}
+
+function getTransporter() {
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+
+  if (!user || !pass) {
+    throw new Error("GMAIL_USER or GMAIL_APP_PASSWORD env var is missing");
+  }
+
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    auth: { user, pass }
+  });
 }
 
 export async function sendReminderEmail({
@@ -37,6 +47,7 @@ export async function sendReminderEmail({
   const eventLabel = EVENT_LABELS[eventType];
   const timeLabel = formatTimeLabel(minutesLeft);
   const isUrgent = minutesLeft <= 60;
+  const fromAddress = process.env.GMAIL_USER!;
 
   const subject = isUrgent
     ? `⏰ Last chance! ${raceName} ${eventLabel} picks lock in ${timeLabel}`
@@ -82,12 +93,16 @@ export async function sendReminderEmail({
 </html>
   `.trim();
 
-  const { error } = await getResend().emails.send({
-    from: FROM_ADDRESS,
+  const transporter = getTransporter();
+
+  const info = await transporter.sendMail({
+    from: `F1 Friends League <${fromAddress}>`,
     to,
     subject,
     html
   });
 
-  if (error) throw new Error(`Resend error: ${error.message}`);
+  if (!info.messageId) {
+    throw new Error("Email send returned no messageId");
+  }
 }
