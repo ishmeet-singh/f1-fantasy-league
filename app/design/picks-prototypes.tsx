@@ -13,66 +13,70 @@ const DRIVERS = [
 const MAX = 5;
 
 // ─── DRAG-SORT HOOK ──────────────────────────────────────
-// Uses pointer events (works for both mouse AND touch).
-// Measures item positions from DOM refs — no HTML5 drag API
-// (which breaks on re-render) and no passive touch event issues.
+// Pattern: container captures the pointer on drag start.
+// Container's onPointerMove/Up handles all moves — no window listeners,
+// no passive event issues, works on mouse and touch.
 
 function useDragSort<T>(initial: T[]) {
   const [items, setItems] = useState<T[]>(initial);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const itemRefs = useRef<(HTMLElement | null)[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const dragFrom = useRef<number | null>(null);
+  const capturedPointerId = useRef<number | null>(null);
 
   const setRef = useCallback((el: HTMLElement | null, i: number) => {
     itemRefs.current[i] = el;
   }, []);
 
-  // Find the closest item index by comparing pointer Y to each item's midpoint
-  function closestIndex(y: number): number {
-    let best = 0;
-    let bestDist = Infinity;
+  function closestIndex(clientY: number): number {
+    let best = 0, bestDist = Infinity;
     itemRefs.current.forEach((el, i) => {
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const mid = rect.top + rect.height / 2;
-      const dist = Math.abs(y - mid);
+      const dist = Math.abs(clientY - (rect.top + rect.height / 2));
       if (dist < bestDist) { bestDist = dist; best = i; }
     });
     return best;
   }
 
-  const startDrag = useCallback((index: number) => {
+  const startDrag = useCallback((index: number, pointerId: number) => {
+    containerRef.current?.setPointerCapture(pointerId);
+    capturedPointerId.current = pointerId;
     dragFrom.current = index;
     setDraggingIndex(index);
+  }, []);
 
-    function onMove(e: PointerEvent) {
-      e.preventDefault();
-      if (dragFrom.current === null) return;
-      const target = closestIndex(e.clientY);
-      if (target === dragFrom.current) return;
-      setItems(prev => {
-        const next = [...prev];
-        const [item] = next.splice(dragFrom.current!, 1);
-        next.splice(target, 0, item);
-        return next;
-      });
-      dragFrom.current = target;
-      setDraggingIndex(target);
-    }
-
-    function onUp() {
-      dragFrom.current = null;
-      setDraggingIndex(null);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    }
-
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
+  const onContainerPointerMove = useCallback((e: React.PointerEvent) => {
+    if (dragFrom.current === null) return;
+    const target = closestIndex(e.clientY);
+    if (target === dragFrom.current) return;
+    setItems(prev => {
+      const next = [...prev];
+      const [item] = next.splice(dragFrom.current!, 1);
+      next.splice(target, 0, item);
+      return next;
+    });
+    dragFrom.current = target;
+    setDraggingIndex(target);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { items, setItems, itemRefs, setRef, draggingIndex, startDrag };
+  const onContainerPointerUp = useCallback(() => {
+    if (capturedPointerId.current !== null) {
+      containerRef.current?.releasePointerCapture(capturedPointerId.current);
+      capturedPointerId.current = null;
+    }
+    dragFrom.current = null;
+    setDraggingIndex(null);
+  }, []);
+
+  return {
+    items, setItems,
+    itemRefs, setRef, containerRef,
+    draggingIndex, startDrag,
+    onContainerPointerMove, onContainerPointerUp,
+  };
 }
 
 // ─── SHARED ──────────────────────────────────────────────
@@ -88,23 +92,26 @@ function SaveButton({ filled, total }: { filled: number; total: number }) {
   );
 }
 
-function Handle({ onStart }: { onStart: () => void }) {
+function Handle({ onStart }: { onStart: (pointerId: number) => void }) {
   return (
     <span
-      onPointerDown={(e) => { e.preventDefault(); onStart(); }}
-      className="text-slate-500 select-none cursor-grab active:cursor-grabbing px-2 text-lg leading-none touch-none"
+      className="text-slate-500 select-none cursor-grab active:cursor-grabbing px-2 text-lg leading-none"
       style={{ touchAction: "none" }}
+      onPointerDown={e => {
+        e.preventDefault();
+        e.stopPropagation();
+        onStart(e.pointerId);
+      }}
     >
       ⠿
     </span>
   );
 }
 
-// ─── OPTION A: Dropdowns + drag handle to reorder ────────
+// ─── OPTION A: Dropdowns + drag to reorder ────────────────
 
 export function OptionAPrototype() {
-  const emptyPicks = Array(MAX).fill("");
-  const { items: picks, setItems: setPicks, setRef, draggingIndex, startDrag } = useDragSort(emptyPicks);
+  const { items: picks, setItems: setPicks, setRef, containerRef, draggingIndex, startDrag, onContainerPointerMove, onContainerPointerUp } = useDragSort(Array(MAX).fill(""));
 
   function set(i: number, val: string) {
     const next = [...picks];
@@ -114,29 +121,34 @@ export function OptionAPrototype() {
     setPicks(next);
   }
 
-  const available = (current: string) =>
-    DRIVERS.filter(d => d === current || !picks.includes(d));
-
   return (
-    <div className="space-y-2">
+    <div
+      ref={containerRef}
+      onPointerMove={onContainerPointerMove}
+      onPointerUp={onContainerPointerUp}
+      onPointerCancel={onContainerPointerUp}
+      className="space-y-2"
+      style={{ touchAction: "none" }}
+    >
       <p className="text-xs text-slate-500 mb-3">Hold ⠿ and drag to reorder</p>
       {picks.map((pick, i) => (
         <div
           key={i}
           ref={el => setRef(el, i)}
-          style={{ touchAction: "none" }}
-          className={`flex items-center gap-2 rounded-lg transition-opacity select-none ${draggingIndex === i ? "opacity-40 scale-95" : "opacity-100"}`}
+          className={`flex items-center gap-2 rounded-lg transition-all ${draggingIndex === i ? "opacity-40 scale-95" : ""}`}
         >
-          <Handle onStart={() => startDrag(i)} />
-          <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{i + 1}</span>
+          <Handle onStart={(pid) => startDrag(i, pid)} />
+          <span className="text-slate-500 font-mono text-xs w-5 shrink-0 select-none">P{i + 1}</span>
           <select
             value={pick}
             onChange={e => set(i, e.target.value)}
-            className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
             style={{ touchAction: "auto" }}
+            className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
           >
             <option value="">Select driver…</option>
-            {available(pick).map(d => <option key={d} value={d}>{d}</option>)}
+            {DRIVERS.filter(d => d === pick || !picks.includes(d)).map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
           </select>
         </div>
       ))}
@@ -148,62 +160,62 @@ export function OptionAPrototype() {
 // ─── OPTION B: Tap to select + drag to reorder ───────────
 
 export function OptionBPrototype() {
-  const { items: picked, setItems: setPicked, setRef, draggingIndex, startDrag } = useDragSort<string>([]);
-
-  function addDriver(d: string) {
-    if (picked.length >= MAX) return;
-    setPicked(prev => [...prev, d]);
-  }
-
-  function removeDriver(d: string) {
-    setPicked(prev => prev.filter(p => p !== d));
-  }
+  const { items: picked, setItems: setPicked, setRef, containerRef, draggingIndex, startDrag, onContainerPointerMove, onContainerPointerUp } = useDragSort<string>([]);
 
   const pool = DRIVERS.filter(d => !picked.includes(d));
   const slots = Array(MAX).fill(null).map((_, i) => picked[i] ?? null);
 
   return (
     <div className="space-y-4">
+      {/* Sortable picks list */}
       <div>
         <p className="text-xs text-slate-500 mb-2">Your picks — {picked.length}/{MAX} · hold ⠿ to reorder</p>
-        <div className="space-y-1.5">
+        <div
+          ref={containerRef}
+          onPointerMove={onContainerPointerMove}
+          onPointerUp={onContainerPointerUp}
+          onPointerCancel={onContainerPointerUp}
+          className="space-y-1.5"
+          style={{ touchAction: "none" }}
+        >
           {slots.map((driver, i) => (
             driver ? (
               <div
                 key={driver}
                 ref={el => setRef(el, i)}
-                style={{ touchAction: "none" }}
-                className={`flex items-center gap-2 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm transition-all select-none ${draggingIndex === i ? "opacity-40 scale-95" : "opacity-100"}`}
+                className={`flex items-center gap-2 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm transition-all select-none ${draggingIndex === i ? "opacity-40 scale-95" : ""}`}
               >
-                <Handle onStart={() => startDrag(i)} />
+                <Handle onStart={(pid) => startDrag(i, pid)} />
                 <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{i + 1}</span>
                 <span className="flex-1 text-white font-medium">{driver}</span>
                 <button
+                  style={{ touchAction: "auto" }}
                   onPointerDown={e => e.stopPropagation()}
-                  onClick={() => removeDriver(driver)}
-                  className="text-slate-500 hover:text-red-400 text-xs ml-1 px-1"
+                  onClick={() => setPicked(prev => prev.filter(p => p !== driver))}
+                  className="text-slate-500 hover:text-red-400 text-sm px-1"
                 >✕</button>
               </div>
             ) : (
-              <div key={`empty-${i}`} className="flex items-center gap-2 rounded-lg border border-dashed border-slate-700/50 px-3 py-2 text-sm opacity-30">
-                <span className="w-6" />
+              <div key={`empty-${i}`} className="flex items-center gap-2 rounded-lg border border-dashed border-slate-700/40 px-3 py-2 opacity-30 select-none">
+                <span className="w-7" />
                 <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{i + 1}</span>
-                <span className="text-slate-600">─ ─ ─ ─ ─</span>
+                <span className="text-slate-600 text-sm">─ ─ ─ ─ ─</span>
               </div>
             )
           ))}
         </div>
       </div>
 
+      {/* Pool */}
       <div>
         <p className="text-xs text-slate-500 mb-2">Tap a driver to add</p>
         <div className="flex flex-wrap gap-2">
           {pool.map(d => (
             <button
               key={d}
-              onClick={() => addDriver(d)}
+              onClick={() => { if (picked.length < MAX) setPicked(prev => [...prev, d]); }}
               disabled={picked.length >= MAX}
-              className="px-3 py-1.5 rounded-full text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-full text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-500 disabled:opacity-30 active:scale-95 transition-all"
             >
               {d}
             </button>
@@ -219,26 +231,25 @@ export function OptionBPrototype() {
 // ─── OPTION C: Unified picks + pool ──────────────────────
 
 export function OptionCPrototype() {
-  const { items: picked, setItems: setPicked, setRef, draggingIndex, startDrag } = useDragSort<string>([]);
+  const { items: picked, setItems: setPicked, setRef, containerRef, draggingIndex, startDrag, onContainerPointerMove, onContainerPointerUp } = useDragSort<string>([]);
 
   const pool = DRIVERS.filter(d => !picked.includes(d));
 
-  function addFromPool(d: string) {
-    if (picked.length >= MAX) return;
-    setPicked(prev => [...prev, d]);
-  }
-
-  function removeFromPicks(d: string) {
-    setPicked(prev => prev.filter(p => p !== d));
-  }
-
   return (
     <div className="rounded-xl border border-slate-700 overflow-hidden">
-      <div>
+      {/* Sortable picks */}
+      <div
+        ref={containerRef}
+        onPointerMove={onContainerPointerMove}
+        onPointerUp={onContainerPointerUp}
+        onPointerCancel={onContainerPointerUp}
+        style={{ touchAction: "none" }}
+      >
         <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Your picks</span>
           <span className="text-xs text-slate-500">{picked.length}/{MAX} · hold ⠿ to reorder</span>
         </div>
+
         {picked.length === 0 ? (
           <div className="px-4 py-6 text-center text-slate-600 text-sm border-b border-dashed border-slate-800">
             ↓ tap a driver below to add
@@ -249,15 +260,15 @@ export function OptionCPrototype() {
               <div
                 key={d}
                 ref={el => setRef(el, i)}
-                style={{ touchAction: "none" }}
-                className={`flex items-center gap-3 px-4 py-2.5 transition-all select-none ${draggingIndex === i ? "opacity-40 scale-95" : "opacity-100"}`}
+                className={`flex items-center gap-3 px-4 py-2.5 select-none transition-all ${draggingIndex === i ? "opacity-40 scale-95" : ""}`}
               >
-                <Handle onStart={() => startDrag(i)} />
+                <Handle onStart={(pid) => startDrag(i, pid)} />
                 <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{i + 1}</span>
                 <span className="flex-1 text-white text-sm font-medium">{d}</span>
                 <button
+                  style={{ touchAction: "auto" }}
                   onPointerDown={e => e.stopPropagation()}
-                  onClick={() => removeFromPicks(d)}
+                  onClick={() => setPicked(prev => prev.filter(p => p !== d))}
                   className="text-red-500/50 hover:text-red-400 text-xs"
                 >✕</button>
               </div>
@@ -266,6 +277,7 @@ export function OptionCPrototype() {
         )}
       </div>
 
+      {/* Pool */}
       <div>
         <div className="px-4 py-2 border-t border-b border-slate-800 flex items-center justify-between bg-slate-900/40">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Driver pool</span>
@@ -275,9 +287,9 @@ export function OptionCPrototype() {
           {pool.map(d => (
             <button
               key={d}
-              onClick={() => addFromPool(d)}
+              onClick={() => { if (picked.length < MAX) setPicked(prev => [...prev, d]); }}
               disabled={picked.length >= MAX}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-left active:bg-slate-700/60"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800/60 disabled:opacity-30 disabled:cursor-not-allowed text-left active:bg-slate-700/60"
             >
               <span className="text-slate-600 text-xs font-bold">+</span>
               <span>{d}</span>
