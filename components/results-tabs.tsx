@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { LocalTime } from "@/components/local-time";
+import { LeaguePicks } from "@/components/league-picks";
 import type { Route } from "next";
 
 type ResultRow = { driver_id: string; actual_position: number; driver_name: string; driver_team: string };
@@ -18,6 +19,7 @@ type Props = {
   selectedRaceId: string;
   selectedRaceName: string;
   selectedRaceDate: string;
+  sessionTimes: { quali: string; sprint: string | null; race: string };
   hasSprint: boolean;
   activeTab: TabId;
   resultsByEvent: Record<TabId, ResultRow[]>;
@@ -55,7 +57,7 @@ function ptsForDiff(et: TabId, diff: number): number {
 
 export function ResultsTabs({
   races, selectedRaceId, selectedRaceName, selectedRaceDate,
-  hasSprint, activeTab, resultsByEvent, picksByEventAndDriver,
+  sessionTimes, hasSprint, activeTab, resultsByEvent, picksByEventAndDriver,
   scoresByEvent, leagueByEvent, currentUserId, hasUser
 }: Props) {
   const router = useRouter();
@@ -76,6 +78,14 @@ export function ResultsTabs({
   const myScore = scoresByEvent[activeTab];
   const leaguePlayers = leagueByEvent[activeTab] ?? [];
   const resultsPublished = results.length > 0;
+
+  // Show league picks once the session has started (locked), even before results are in
+  const sessionStart = sessionTimes[activeTab];
+  const sessionLocked = sessionStart ? new Date(sessionStart) <= new Date() : false;
+  const showLeaguePicks = sessionLocked && leaguePlayers.length > 0;
+
+  // Map results for LeaguePicks component
+  const resultsList = results.map((r) => ({ driverId: r.driver_id, actualPos: r.actual_position }));
 
   // Build actual position lookup: driverId -> actualPosition
   const actualPos = new Map(results.map((r) => [r.driver_id, r.actual_position]));
@@ -310,82 +320,13 @@ export function ResultsTabs({
             </div>
           )}
 
-          {/* LEAGUE PICKS — only visible after results are published */}
-          {leaguePlayers.length > 0 && resultsPublished && (
-            <div className="card p-0">
-              <div className="px-4 py-3 border-b border-slate-800">
-                <p className="text-sm font-medium text-slate-300">Everyone&apos;s Picks</p>
-              </div>
-              {/* Desktop: compact table with sticky player column */}
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-left text-xs text-slate-500 uppercase tracking-wider">
-                      <th className="px-4 py-2.5 sticky left-0 bg-slate-900">Player</th>
-                      {leaguePlayers[0]?.picks.map((p) => (
-                        <th key={p.predictedPos} className="px-3 py-2.5 text-center">P{p.predictedPos}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaguePlayers.map((player, i) => {
-                      const isMe = player.userId === currentUserId;
-                      return (
-                        <tr key={player.userId}
-                          className={`border-t border-slate-800/50 ${isMe ? "bg-red-950/20" : i % 2 === 0 ? "" : "bg-slate-800/20"}`}
-                        >
-                          <td className={`px-4 py-2.5 sticky left-0 font-medium text-sm ${isMe ? "bg-red-950/40 text-white" : "bg-slate-900 text-slate-300"}`}>
-                            {player.userName}{isMe && <span className="ml-1 text-xs text-red-400">(you)</span>}
-                          </td>
-                          {player.picks.map((p) => {
-                            const actual = actualPos.get(p.driverId) ?? null;
-                            const exact = actual === p.predictedPos;
-                            return (
-                              <td key={p.predictedPos} className="px-3 py-2.5 text-center">
-                                <div className={`text-xs rounded px-1.5 py-0.5 inline-block ${
-                                  exact ? "bg-emerald-900/50 text-emerald-300"
-                                  : actual !== null ? "text-slate-400" : "text-slate-500"
-                                }`}>
-                                  {p.driverName.split(" ").pop()}{exact && " ✓"}
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {/* Mobile: stacked cards per player */}
-              <div className="sm:hidden divide-y divide-slate-800">
-                {leaguePlayers.map((player) => {
-                  const isMe = player.userId === currentUserId;
-                  return (
-                    <div key={player.userId} className={`px-4 py-3 space-y-2 ${isMe ? "bg-red-950/20" : ""}`}>
-                      <p className={`text-sm font-semibold ${isMe ? "text-white" : "text-slate-300"}`}>
-                        {player.userName}{isMe && <span className="ml-1.5 text-xs text-red-400">(you)</span>}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {player.picks.map((p) => {
-                          const actual = actualPos.get(p.driverId) ?? null;
-                          const exact = actual === p.predictedPos;
-                          return (
-                            <span key={p.predictedPos} className={`text-xs px-2 py-0.5 rounded-full border ${
-                              exact
-                                ? "bg-emerald-900/40 border-emerald-800/50 text-emerald-300"
-                                : "bg-slate-800 border-slate-700 text-slate-400"
-                            }`}>
-                              P{p.predictedPos} {p.driverName.split(" ").pop()}{exact && " ✓"}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* LEAGUE PICKS — visible once session is locked, upgrades with results */}
+          {showLeaguePicks && (
+            <LeaguePicks
+              players={leaguePlayers.map((p) => ({ ...p, isMe: p.userId === currentUserId }))}
+              results={resultsList}
+              defaultOpen={true}
+            />
           )}
         </div>
       )}

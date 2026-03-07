@@ -1,5 +1,6 @@
 import { PicksForm } from "@/components/picks-form";
 import { PicksRaceSelector } from "@/components/picks-race-selector";
+import { LeaguePicks } from "@/components/league-picks";
 import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
 import { createServerSupabase } from "@/lib/supabase-server";
@@ -87,7 +88,7 @@ export default async function PicksPage({
   const race = races.find((r) => r.id === selectedRaceId) ?? defaultRace;
 
   // Fetch this user's picks and any existing results for the selected race in parallel
-  const [{ data: pickRows }, { data: existingResults }] = await Promise.all([
+  const [{ data: pickRows }, { data: existingResults }, { data: allUsers }, { data: allPickRows }] = await Promise.all([
     admin
       .from("predictions")
       .select("driver_id,predicted_position,event_type")
@@ -95,12 +96,48 @@ export default async function PicksPage({
       .eq("user_id", user.id),
     admin
       .from("results")
-      .select("event_type")
+      .select("event_type,driver_id,actual_position")
+      .eq("race_id", race.id),
+    admin
+      .from("users")
+      .select("id,display_name,email")
+      .order("created_at"),
+    admin
+      .from("predictions")
+      .select("user_id,driver_id,predicted_position,event_type,drivers(name)")
       .eq("race_id", race.id)
   ]);
 
   // Which events already have results in the DB (simulated or real)
   const eventsWithResults = new Set((existingResults ?? []).map((r) => r.event_type));
+
+  // Build league picks per event for locked sessions
+  type LeaguePlayer = { userId: string; userName: string; isMe: boolean; picks: { predictedPos: number; driverId: string; driverName: string }[] };
+  function leaguePicksForEvent(eventType: "quali" | "sprint" | "race"): LeaguePlayer[] {
+    return (allUsers ?? []).map((u) => {
+      const userPicks = (allPickRows ?? [])
+        .filter((p) => p.user_id === u.id && p.event_type === eventType)
+        .map((p) => {
+          const dn = Array.isArray(p.drivers)
+            ? p.drivers[0]?.name
+            : (p.drivers as { name: string } | null)?.name ?? p.driver_id;
+          return { predictedPos: p.predicted_position, driverId: p.driver_id, driverName: dn ?? p.driver_id };
+        });
+      return {
+        userId: u.id,
+        userName: u.display_name || u.email.split("@")[0],
+        isMe: u.id === user!.id,
+        picks: userPicks
+      };
+    }).filter((p) => p.picks.length > 0);
+  }
+
+  // Results lookup for league picks component
+  function resultsForEvent(eventType: "quali" | "sprint" | "race") {
+    return (existingResults ?? [])
+      .filter((r) => r.event_type === eventType)
+      .map((r) => ({ driverId: r.driver_id, actualPos: r.actual_position }));
+  }
 
   function picksForEvent(eventType: "quali" | "sprint" | "race") {
     return Object.fromEntries(
@@ -175,7 +212,7 @@ export default async function PicksPage({
           </div>
         </div>
       ) : (
-        /* Picks forms */
+        /* Picks forms + league picks for locked sessions */
         <div className="space-y-4">
           <PicksForm
             drivers={drivers || []}
@@ -186,17 +223,33 @@ export default async function PicksPage({
             deadline={race.quali_start}
             initial={picksForEvent("quali")}
           />
-          {race.has_sprint && race.sprint_start && (
-            <PicksForm
-              drivers={drivers || []}
-              raceId={race.id}
-              eventType="sprint"
-              size={10}
-              locked={sprintLocked}
-              deadline={race.sprint_start}
-              initial={picksForEvent("sprint")}
+          {qualiLocked && (
+            <LeaguePicks
+              players={leaguePicksForEvent("quali")}
+              results={resultsForEvent("quali")}
             />
           )}
+
+          {race.has_sprint && race.sprint_start && (
+            <>
+              <PicksForm
+                drivers={drivers || []}
+                raceId={race.id}
+                eventType="sprint"
+                size={10}
+                locked={sprintLocked}
+                deadline={race.sprint_start}
+                initial={picksForEvent("sprint")}
+              />
+              {sprintLocked && (
+                <LeaguePicks
+                  players={leaguePicksForEvent("sprint")}
+                  results={resultsForEvent("sprint")}
+                />
+              )}
+            </>
+          )}
+
           <PicksForm
             drivers={drivers || []}
             raceId={race.id}
@@ -206,6 +259,12 @@ export default async function PicksPage({
             deadline={race.race_start}
             initial={picksForEvent("race")}
           />
+          {raceLocked && (
+            <LeaguePicks
+              players={leaguePicksForEvent("race")}
+              results={resultsForEvent("race")}
+            />
+          )}
         </div>
       )}
     </div>

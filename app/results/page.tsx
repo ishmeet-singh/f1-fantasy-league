@@ -29,7 +29,7 @@ export default async function ResultsPage({
   // Full season schedule ordered chronologically
   const { data: races } = await admin
     .from("race_weekends")
-    .select("id,grand_prix,race_date,quali_start,race_start,has_sprint")
+    .select("id,grand_prix,race_date,quali_start,sprint_start,race_start,has_sprint")
     .order("race_start", { ascending: true });
 
   if (!races?.length) {
@@ -188,6 +188,11 @@ export default async function ResultsPage({
       selectedRaceId={selectedRace.id}
       selectedRaceName={selectedRace.grand_prix}
       selectedRaceDate={selectedRace.race_start}
+      sessionTimes={{
+        quali: selectedRace.quali_start,
+        sprint: selectedRace.sprint_start ?? null,
+        race: selectedRace.race_start
+      }}
       hasSprint={Boolean(selectedRace.has_sprint)}
       activeTab={activeTab}
       resultsByEvent={resultsByEvent}
