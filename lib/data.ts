@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { bestNWeekendTotal } from "@/lib/scoring";
-import { syncCalendarJolpi } from "@/lib/sync-jolpi";
+import { syncCalendar } from "@/lib/sync";
 
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
@@ -18,10 +18,10 @@ async function fetchNextRaceFromDb() {
 export async function getNextRace() {
   let race = await fetchNextRaceFromDb();
 
-  // If DB has no upcoming races, auto-populate from Jolpi (no manual sync needed)
+  // If DB has no upcoming races, auto-populate via syncCalendar (uses OpenF1 primary)
   if (!race) {
     try {
-      await syncCalendarJolpi();
+      await syncCalendar();
       race = await fetchNextRaceFromDb();
     } catch (err) {
       console.error("Auto calendar sync failed:", err);

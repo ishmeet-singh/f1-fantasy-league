@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { syncCalendarJolpi } from "@/lib/sync-jolpi";
+import { syncCalendar } from "@/lib/sync";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +50,7 @@ export default async function PicksPage({
   // Auto-populate from Jolpi if DB is empty
   if (!allRaces?.length) {
     try {
-      await syncCalendarJolpi();
+      await syncCalendar();
       const refetch = await admin
         .from("race_weekends")
         .select("*")
