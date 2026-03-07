@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type Player = { id: string; email: string; display_name: string | null; created_at: string };
+type RaceOption = { id: string; grand_prix: string; race_start: string; has_sprint: boolean };
 
 const TEST_RACE_ID = "test-race-2099";
 
@@ -24,7 +25,7 @@ function StatusMsg({ status, error }: { status: string; error: string }) {
   );
 }
 
-export function AdminPanel({ initialPlayers }: { initialPlayers: Player[] }) {
+export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlayers: Player[]; upcomingRaces?: RaceOption[] }) {
   const [players, setPlayers] = useState<Player[]>(initialPlayers);
   const [newEmail, setNewEmail] = useState("");
   const [playerStatus, setPlayerStatus] = useState("");
@@ -38,6 +39,12 @@ export function AdminPanel({ initialPlayers }: { initialPlayers: Player[] }) {
   const [syncStatus, setSyncStatus] = useState("");
   const [syncError, setSyncError] = useState("");
   const [syncLoading, setSyncLoading] = useState<string | null>(null);
+
+  const [reminderRaceId, setReminderRaceId] = useState(upcomingRaces[0]?.id || "");
+  const [reminderEvent, setReminderEvent] = useState<"quali" | "sprint" | "race">("race");
+  const [reminderStatus, setReminderStatus] = useState("");
+  const [reminderError, setReminderError] = useState("");
+  const [reminderLoading, setReminderLoading] = useState(false);
 
   async function addPlayer() {
     if (!newEmail.trim()) return;
@@ -134,6 +141,25 @@ export function AdminPanel({ initialPlayers }: { initialPlayers: Player[] }) {
     setSyncLoading(null);
     if (res.ok) setSyncStatus(`${label} complete`);
     else setSyncError(`${label} failed`);
+  }
+
+  async function sendReminderNow() {
+    if (!reminderRaceId) return;
+    setReminderLoading(true);
+    setReminderStatus("");
+    setReminderError("");
+    const res = await fetch("/api/admin/send-reminder-now", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ raceId: reminderRaceId, eventType: reminderEvent })
+    });
+    const json = await res.json();
+    setReminderLoading(false);
+    if (res.ok) {
+      setReminderStatus(`Sent ${json.sent} email${json.sent !== 1 ? "s" : ""}. ${json.alreadySubmitted} player${json.alreadySubmitted !== 1 ? "s" : ""} already submitted — skipped.`);
+    } else {
+      setReminderError(json.error || "Failed");
+    }
   }
 
   async function testReminder() {
@@ -254,6 +280,46 @@ export function AdminPanel({ initialPlayers }: { initialPlayers: Player[] }) {
           <li>Click &quot;Clear test race&quot; to remove all test data when done</li>
         </ol>
       </Section>
+
+      {/* Send Reminder Now */}
+      {upcomingRaces.length > 0 && (
+        <Section title="Send Reminder Now">
+          <p className="text-sm text-slate-400">
+            Immediately email all players who haven&apos;t submitted picks for a session.
+          </p>
+          <div className="flex flex-wrap gap-2 items-center">
+            <select
+              value={reminderRaceId}
+              onChange={e => setReminderRaceId(e.target.value)}
+              className="rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+            >
+              {upcomingRaces.map(r => (
+                <option key={r.id} value={r.id}>{r.grand_prix}</option>
+              ))}
+            </select>
+            <select
+              value={reminderEvent}
+              onChange={e => setReminderEvent(e.target.value as "quali" | "sprint" | "race")}
+              className="rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+            >
+              <option value="quali">Qualifying</option>
+              {upcomingRaces.find(r => r.id === reminderRaceId)?.has_sprint && (
+                <option value="sprint">Sprint</option>
+              )}
+              <option value="race">Race</option>
+            </select>
+            <button
+              onClick={sendReminderNow}
+              disabled={reminderLoading}
+              className="rounded bg-red-600 hover:bg-red-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            >
+              {reminderLoading ? "Sending…" : "Send reminder emails"}
+            </button>
+          </div>
+          {reminderStatus && <p className="text-sm text-emerald-400">{reminderStatus}</p>}
+          {reminderError && <p className="text-sm text-red-400">{reminderError}</p>}
+        </Section>
+      )}
 
       {/* Manual Tools */}
       <Section title="Manual Tools">
