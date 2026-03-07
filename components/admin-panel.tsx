@@ -136,6 +136,20 @@ export function AdminPanel({ initialPlayers }: { initialPlayers: Player[] }) {
     else setSyncError(`${label} failed`);
   }
 
+  async function testReminder() {
+    setSyncLoading("test-reminder");
+    setSyncStatus("");
+    setSyncError("");
+    const res = await fetch("/api/admin/test-reminder", { method: "POST" });
+    const json = await res.json();
+    setSyncLoading(null);
+    if (res.ok) {
+      setSyncStatus(`✓ Test email sent. Checks: ${JSON.stringify(json.checks)}`);
+    } else {
+      setSyncError(`Email failed: ${json.error} | Checks: ${JSON.stringify(json.checks)}`);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Players */}
@@ -246,6 +260,15 @@ export function AdminPanel({ initialPlayers }: { initialPlayers: Player[] }) {
         <p className="text-xs text-slate-500">
           Run &quot;Sync Season Calendar&quot; once to populate all races and drivers from OpenF1. After that, results sync automatically.
         </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={testReminder}
+            disabled={syncLoading !== null}
+            className="rounded bg-orange-600 hover:bg-orange-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+          >
+            {syncLoading === "test-reminder" ? "Sending…" : "Test reminder email"}
+          </button>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => manualAction("/api/admin/sync-calendar", "Sync calendar")}
