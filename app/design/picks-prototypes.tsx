@@ -6,9 +6,11 @@ import {
   closestCenter,
   PointerSensor,
   TouchSensor,
+  DragOverlay,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -43,8 +45,10 @@ function SaveButton({ filled, total }: { filled: number; total: number }) {
 
 function useDndSensors() {
   return useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+    // distance: 3 — starts drag after 3px movement, no delay
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+    // distance only (no delay) — drag starts as soon as finger moves 8px
+    useSensor(TouchSensor, { activationConstraint: { distance: 8 } })
   );
 }
 
@@ -135,6 +139,22 @@ export function OptionAPrototype() {
 
 // ─── OPTION B: Tap to add + drag to reorder ──────────────
 
+// Reusable row content (used in both live list and DragOverlay)
+function PickRowContent({ position, driver, onRemove, isOverlay = false }: {
+  position: number; driver: string; onRemove?: () => void; isOverlay?: boolean;
+}) {
+  return (
+    <>
+      <span className={`px-1 text-lg leading-none ${isOverlay ? "text-red-400" : "text-slate-400 group-hover:text-slate-200"}`}>⠿</span>
+      <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{position}</span>
+      <span className="flex-1 text-white font-medium">{driver}</span>
+      {onRemove && (
+        <button onClick={onRemove} className="text-slate-500 hover:text-red-400 text-sm px-1">✕</button>
+      )}
+    </>
+  );
+}
+
 function SortablePickRow({
   id, position, driver, onRemove
 }: {
@@ -146,25 +166,31 @@ function SortablePickRow({
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className="flex items-center gap-2 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm select-none"
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`group flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm select-none cursor-grab active:cursor-grabbing transition-colors ${
+        isDragging
+          ? "opacity-30 bg-slate-800 border-slate-600"
+          : "bg-slate-800 border-slate-700 hover:border-slate-500"
+      }`}
+      {...listeners} {...attributes}
     >
-      <span
-        {...listeners} {...attributes}
-        className="cursor-grab active:cursor-grabbing px-1 text-slate-500 text-lg leading-none touch-none"
-      >⠿</span>
-      <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{position}</span>
-      <span className="flex-1 text-white font-medium">{driver}</span>
-      <button
-        onClick={onRemove}
-        className="text-slate-500 hover:text-red-400 text-sm px-1"
-      >✕</button>
+      <PickRowContent position={position} driver={driver} onRemove={onRemove} />
+    </div>
+  );
+}
+
+// Floating ghost shown during drag
+function DragOverlayRow({ position, driver }: { position: number; driver: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-slate-700 border border-red-500/60 px-3 py-2.5 text-sm shadow-2xl shadow-black/60 select-none cursor-grabbing scale-105">
+      <PickRowContent position={position} driver={driver} isOverlay />
     </div>
   );
 }
 
 export function OptionBPrototype() {
   const [picked, setPicked] = useState<{ id: string; driver: string }[]>([]);
+  const [activeItem, setActiveItem] = useState<{ id: string; driver: string } | null>(null);
   const sensors = useDndSensors();
   const pool = DRIVERS.filter(d => !picked.some(p => p.driver === d));
 
@@ -177,7 +203,13 @@ export function OptionBPrototype() {
     setPicked(prev => prev.filter(p => p.id !== id));
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    const item = picked.find(p => p.id === event.active.id);
+    setActiveItem(item ?? null);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    setActiveItem(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     setPicked(prev => {
@@ -205,7 +237,7 @@ export function OptionBPrototype() {
           </div>
         )}
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <SortableContext items={picked.map(p => p.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-1.5">
               {picked.map((p, i) => (
@@ -219,6 +251,14 @@ export function OptionBPrototype() {
               ))}
             </div>
           </SortableContext>
+          <DragOverlay>
+            {activeItem ? (
+              <DragOverlayRow
+                position={picked.findIndex(p => p.id === activeItem.id) + 1}
+                driver={activeItem.driver}
+              />
+            ) : null}
+          </DragOverlay>
         </DndContext>
       </div>
 
@@ -247,6 +287,7 @@ export function OptionBPrototype() {
 
 export function OptionCPrototype() {
   const [picked, setPicked] = useState<{ id: string; driver: string }[]>([]);
+  const [activeItem, setActiveItem] = useState<{ id: string; driver: string } | null>(null);
   const sensors = useDndSensors();
   const pool = DRIVERS.filter(d => !picked.some(p => p.driver === d));
 
@@ -259,7 +300,13 @@ export function OptionCPrototype() {
     setPicked(prev => prev.filter(p => p.id !== id));
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    const item = picked.find(p => p.id === event.active.id);
+    setActiveItem(item ?? null);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    setActiveItem(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     setPicked(prev => {
@@ -281,7 +328,7 @@ export function OptionCPrototype() {
           ↓ tap a driver below to add
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <SortableContext items={picked.map(p => p.id)} strategy={verticalListSortingStrategy}>
             <div className="divide-y divide-slate-800/60">
               {picked.map((p, i) => (
@@ -295,6 +342,14 @@ export function OptionCPrototype() {
               ))}
             </div>
           </SortableContext>
+          <DragOverlay>
+            {activeItem ? (
+              <DragOverlayRow
+                position={picked.findIndex(p => p.id === activeItem.id) + 1}
+                driver={activeItem.driver}
+              />
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
 
