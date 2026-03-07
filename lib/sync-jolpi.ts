@@ -3,11 +3,11 @@ import { recomputeAllScores } from "@/lib/recompute";
 import {
   fetchJolpiRaces,
   fetchJolpiDriverStandings,
+  fetchJolpiDrivers,
   fetchAllJolpiRaceResults,
   fetchAllJolpiQualiResults,
   fetchAllJolpiSprintResults,
-  jolpiRaceId,
-  type JolpiDriverStanding
+  jolpiRaceId
 } from "@/lib/jolpi";
 
 function isoDateTime(date: string, time: string) {
@@ -17,32 +17,35 @@ function isoDateTime(date: string, time: string) {
 
 export async function syncCalendarJolpi(year = new Date().getUTCFullYear()) {
   const supabase = getSupabaseAdmin();
-  const [races, standings] = await Promise.all([
+  const [races, standings, driverList] = await Promise.all([
     fetchJolpiRaces(year),
-    fetchJolpiDriverStandings(year)
+    fetchJolpiDriverStandings(year),
+    fetchJolpiDrivers(year)
   ]);
 
-  // Build driver->team map from standings (if standings exist)
-  const teamByDriver = new Map<string, string>();
-  for (const s of standings) {
-    teamByDriver.set(s.Driver.driverId, s.Constructors?.[0]?.name || "");
-  }
-
-  // Upsert drivers — use standings if available, otherwise driver list from standings
-  const driversToSync: JolpiDriverStanding[] = standings.length > 0
-    ? standings
-    : [];
-
-  for (const s of driversToSync) {
-    await supabase.from("drivers").upsert({
+  // Sync drivers: standings have team info (mid/end season), driver list covers pre-season
+  if (standings.length > 0) {
+    // Standings: have team info
+    const driverRows = standings.map((s) => ({
       id: s.Driver.driverId,
       name: `${s.Driver.givenName} ${s.Driver.familyName}`,
       team: s.Constructors?.[0]?.name || "TBD"
-    });
+    }));
+    if (driverRows.length) {
+      await supabase.from("drivers").upsert(driverRows, { onConflict: "id" });
+    }
+  } else if (driverList.length > 0) {
+    // Pre-season: no standings yet, but driver list is available
+    const driverRows = driverList.map((d) => ({
+      id: d.driverId,
+      name: `${d.givenName} ${d.familyName}`,
+      team: "TBD"
+    }));
+    await supabase.from("drivers").upsert(driverRows, { onConflict: "id" });
   }
 
-  // Upsert race weekends
-  for (const race of races) {
+  // Upsert race weekends in a single batch
+  const raceRows = races.map((race) => {
     const raceStart = isoDateTime(race.date, race.time);
     const qualiStart = race.Qualifying
       ? isoDateTime(race.Qualifying.date, race.Qualifying.time)
@@ -50,8 +53,7 @@ export async function syncCalendarJolpi(year = new Date().getUTCFullYear()) {
     const sprintStart = race.Sprint
       ? isoDateTime(race.Sprint.date, race.Sprint.time)
       : null;
-
-    await supabase.from("race_weekends").upsert({
+    return {
       id: jolpiRaceId(year, race.round),
       grand_prix: race.raceName,
       race_date: raceStart,
@@ -59,7 +61,14 @@ export async function syncCalendarJolpi(year = new Date().getUTCFullYear()) {
       sprint_start: sprintStart,
       race_start: raceStart,
       has_sprint: Boolean(sprintStart)
-    });
+    };
+  });
+
+  if (raceRows.length) {
+    const { error } = await supabase
+      .from("race_weekends")
+      .upsert(raceRows, { onConflict: "id" });
+    if (error) throw new Error(`race_weekends upsert failed: ${error.message}`);
   }
 }
 
@@ -115,20 +124,25 @@ export async function syncResultsJolpi() {
         if (!rows.length) continue;
         anyResults = true;
 
-        // Enrich driver teams from results
-        for (const row of rows) {
-          if (row.team) {
-            await supabase.from("drivers").update({ team: row.team }).eq("id", row.driverId).eq("team", "TBD");
-          }
-        }
+        // Batch upsert results with correct conflict target
+        const resultRows = rows.map((row) => ({
+          race_id: race.id,
+          event_type: eventType,
+          driver_id: row.driverId,
+          actual_position: row.position
+        }));
+        const { error: resultsError } = await supabase
+          .from("results")
+          .upsert(resultRows, { onConflict: "race_id,event_type,driver_id" });
+        if (resultsError) console.error(`results upsert error (${eventType}):`, resultsError.message);
 
-        for (const row of rows) {
-          await supabase.from("results").upsert({
-            race_id: race.id,
-            event_type: eventType,
-            driver_id: row.driverId,
-            actual_position: row.position
-          });
+        // Enrich driver teams in batch — only update TBD entries
+        const driverUpdates = rows.filter((r) => r.team);
+        for (const row of driverUpdates) {
+          await supabase.from("drivers")
+            .update({ team: row.team })
+            .eq("id", row.driverId)
+            .eq("team", "TBD");
         }
       }
     }

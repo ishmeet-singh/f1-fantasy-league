@@ -1,5 +1,7 @@
 import { PicksForm } from "@/components/picks-form";
 import { PicksRaceSelector } from "@/components/picks-race-selector";
+import { LocalTime } from "@/components/local-time";
+import { SESSION_OPTS } from "@/lib/date-formats";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { syncCalendarJolpi } from "@/lib/sync-jolpi";
@@ -23,16 +25,7 @@ function formatCountdown(ms: number): string {
   return `${mins}m`;
 }
 
-function formatSessionTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true
-  });
-}
+// Formatting moved client-side via LocalTime to respect browser timezone
 
 export default async function PicksPage({
   searchParams
@@ -149,7 +142,7 @@ export default async function PicksPage({
         <div>
           <h2 className="text-xl font-bold">{race.grand_prix}</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Race · {formatSessionTime(race.race_start)}
+            Race · <LocalTime iso={race.race_start} opts={SESSION_OPTS} />
           </p>
         </div>
         {!isOpen && (
@@ -167,17 +160,17 @@ export default async function PicksPage({
           <div className="text-sm text-slate-500 space-y-2">
             <div className="flex justify-between">
               <span className="text-slate-400">Qualifying</span>
-              <span>{formatSessionTime(race.quali_start)}</span>
+              <span><LocalTime iso={race.quali_start} opts={SESSION_OPTS} /></span>
             </div>
             {race.has_sprint && race.sprint_start && (
               <div className="flex justify-between">
                 <span className="text-slate-400">Sprint</span>
-                <span>{formatSessionTime(race.sprint_start)}</span>
+                <span><LocalTime iso={race.sprint_start} opts={SESSION_OPTS} /></span>
               </div>
             )}
             <div className="flex justify-between">
               <span className="text-slate-400">Race</span>
-              <span>{formatSessionTime(race.race_start)}</span>
+              <span><LocalTime iso={race.race_start} opts={SESSION_OPTS} /></span>
             </div>
           </div>
         </div>

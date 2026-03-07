@@ -46,13 +46,19 @@ async function syncCalendarOpenF1(year: number) {
 }
 
 export async function syncCalendar(year = new Date().getUTCFullYear()) {
+  // Jolpi is the primary source — more reliable and has correct 2026 data
   try {
-    await syncCalendarOpenF1(year);
-    console.log("Calendar synced via OpenF1");
-  } catch (openF1Err) {
-    console.warn("OpenF1 calendar sync failed, falling back to Jolpi:", openF1Err);
     await syncCalendarJolpi(year);
     console.log("Calendar synced via Jolpi/Ergast");
+  } catch (jolpiErr) {
+    console.warn("Jolpi calendar sync failed, trying OpenF1:", jolpiErr);
+    try {
+      await syncCalendarOpenF1(year);
+      console.log("Calendar synced via OpenF1");
+    } catch (openF1Err) {
+      console.error("Both calendar syncs failed:", openF1Err);
+      throw openF1Err;
+    }
   }
 }
 

@@ -69,6 +69,24 @@ export async function fetchJolpiDriverStandings(year: number): Promise<JolpiDriv
   }
 }
 
+type JolpiDriverEntry = {
+  driverId: string;
+  givenName: string;
+  familyName: string;
+  code?: string;
+};
+type JolpiDriversResponse = { MRData: { DriverTable: { Drivers: JolpiDriverEntry[] } } };
+
+// Fetch full driver list for a season — works even before standings exist
+export async function fetchJolpiDrivers(year: number): Promise<JolpiDriverEntry[]> {
+  try {
+    const data = await fetchJson<JolpiDriversResponse>(`/f1/${year}/drivers/?limit=100`);
+    return data.MRData.DriverTable.Drivers ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // Bulk fetchers — one call per event type, returns results grouped by round
 export type BulkResultsByRound = Map<string, { driverId: string; position: number; team: string }[]>;
 

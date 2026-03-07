@@ -8,6 +8,11 @@ export async function GET(request: Request) {
   const denied = assertCronAuthorized(request);
   if (denied) return denied;
 
-  await syncResults();
-  return NextResponse.json({ ok: true });
+  try {
+    await syncResults();
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("sync-results cron error:", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }

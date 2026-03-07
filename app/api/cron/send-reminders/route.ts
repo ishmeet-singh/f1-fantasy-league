@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   if (denied) return denied;
 
   const supabase = getSupabaseAdmin();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://f1-fantasy-league-lilac.vercel.app";
 
   // Fetch races with sessions in the next 49 hours
   const lookaheadMs = (48 * 60 + 60) * 60 * 1000;

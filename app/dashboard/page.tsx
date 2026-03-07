@@ -3,6 +3,8 @@ import { getLeaderboard, getNextRace, getPersonalStats, getSeasonProgress } from
 import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { Countdown } from "@/components/countdown";
+import { LocalTime } from "@/components/local-time";
+import { SESSION_OPTS } from "@/lib/date-formats";
 
 export const dynamic = "force-dynamic";
 
@@ -89,14 +91,7 @@ export default async function DashboardPage() {
                   <div key={label} className="flex justify-between gap-4">
                     <span className="shrink-0">{label}</span>
                     <span className="text-slate-300 text-right">
-                      {new Date(iso).toLocaleString(undefined, {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: true
-                      })}
+                      <LocalTime iso={iso} opts={SESSION_OPTS} />
                     </span>
                   </div>
                 ))}

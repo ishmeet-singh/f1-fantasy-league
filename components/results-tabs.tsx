@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { LocalTime } from "@/components/local-time";
 import type { Route } from "next";
 
 type ResultRow = { driver_id: string; actual_position: number; driver_name: string; driver_team: string };
@@ -132,7 +133,7 @@ export function ResultsTabs({
         <div>
           <h2 className="text-xl font-bold">{selectedRaceName}</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            {new Date(selectedRaceDate).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+            <LocalTime iso={selectedRaceDate} opts={{ day: "numeric", month: "short", year: "numeric" }} />
           </p>
         </div>
         {hasUser && weekendTotal > 0 && (
