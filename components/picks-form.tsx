@@ -137,8 +137,8 @@ export function PicksForm({
   // Open state: editable form
   return (
     <div className="card space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <h3 className="font-semibold">{EVENT_LABELS[eventType]} — Top {size}</h3>
           {hasSavedPicks && !hasUnsavedChanges && status !== "saved" && (
             <span className="text-xs bg-emerald-900/40 text-emerald-400 border border-emerald-800/50 px-2 py-0.5 rounded-full">

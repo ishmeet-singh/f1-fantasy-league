@@ -155,8 +155,9 @@ export default async function AdminPicksPage({
               </span>
             </div>
 
-            <div className="card overflow-hidden p-0">
-              <table className="w-full text-sm">
+            <div className="card p-0">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[420px]">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500 uppercase tracking-wider">
                     <th className="px-4 py-3">Player</th>
@@ -221,6 +222,7 @@ export default async function AdminPicksPage({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         );

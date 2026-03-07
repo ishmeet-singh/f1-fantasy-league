@@ -174,7 +174,7 @@ export default async function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
               {(["quali", "sprint", "race"] as const)
                 .filter((et) => et !== "sprint" || nextRace.has_sprint)
                 .map((et) => {
@@ -234,15 +234,12 @@ export default async function DashboardPage() {
                   <span className="w-6 text-center text-base leading-none">
                     {i < 3 ? MEDALS[i] : <span className="text-slate-500 text-xs">{i + 1}</span>}
                   </span>
-                  <span className={`flex-1 font-medium ${isMe ? "text-white" : "text-slate-200"}`}>
+                  <span className={`flex-1 min-w-0 font-medium truncate ${isMe ? "text-white" : "text-slate-200"}`}>
                     {entry.name}
                     {isMe && <span className="ml-2 text-xs text-red-400">(you)</span>}
                   </span>
-                  <span className="font-mono font-semibold text-white">{entry.score}</span>
-                  <span className="text-slate-500 text-xs w-16 text-right hidden sm:block">
-                    err {entry.error}
-                  </span>
-                  <span className="text-slate-500 text-xs w-14 text-right hidden sm:block">
+                  <span className="font-mono font-semibold text-white shrink-0">{entry.score}</span>
+                  <span className="text-slate-500 text-xs w-14 text-right hidden sm:block shrink-0">
                     {entry.exact} exact
                   </span>
                 </div>

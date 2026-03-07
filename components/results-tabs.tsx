@@ -148,7 +148,7 @@ export function ResultsTabs({
       </div>
 
       {/* Session tabs */}
-      <div className="flex gap-1 border-b border-slate-800">
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-800 scrollbar-none">
         {tabs.map((tab) => {
           const s = scoresByEvent[tab];
           return (
@@ -192,18 +192,19 @@ export function ResultsTabs({
         <div className="space-y-4">
           {/* MY PICKS — primary view */}
           {hasUser && hasMyPicks && (
-            <div className="card overflow-hidden p-0">
+            <div className="card p-0">
               <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
                 <p className="text-sm font-medium text-slate-300">My Picks</p>
                 {hasResults && (
                   <button onClick={() => setShowFullResults((v) => !v)}
-                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors shrink-0 ml-2"
                   >
-                    {showFullResults ? "Hide full results ↑" : "Show full results ↓"}
+                    {showFullResults ? "Hide results ↑" : "Show full results ↓"}
                   </button>
                 )}
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[340px]">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500 uppercase tracking-wider">
                     <th className="px-4 py-2.5">My pick</th>
@@ -251,16 +252,18 @@ export function ResultsTabs({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
           {/* FULL RESULTS — shown when toggled or when user has no picks */}
           {hasResults && (!hasMyPicks || showFullResults) && (
-            <div className="card overflow-hidden p-0">
+            <div className="card p-0">
               <div className="px-4 py-3 border-b border-slate-800">
                 <p className="text-sm font-medium text-slate-300">Full Results</p>
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[300px]">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500 uppercase tracking-wider">
                     <th className="px-4 py-2.5 w-12">Pos</th>
@@ -303,16 +306,18 @@ export function ResultsTabs({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
           {/* LEAGUE PICKS — only visible after results are published */}
           {leaguePlayers.length > 0 && resultsPublished && (
-            <div className="card overflow-hidden p-0">
+            <div className="card p-0">
               <div className="px-4 py-3 border-b border-slate-800">
                 <p className="text-sm font-medium text-slate-300">Everyone&apos;s Picks</p>
               </div>
-              <div className="overflow-x-auto">
+              {/* Desktop: compact table with sticky player column */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-800 text-left text-xs text-slate-500 uppercase tracking-wider">
@@ -339,11 +344,9 @@ export function ResultsTabs({
                               <td key={p.predictedPos} className="px-3 py-2.5 text-center">
                                 <div className={`text-xs rounded px-1.5 py-0.5 inline-block ${
                                   exact ? "bg-emerald-900/50 text-emerald-300"
-                                  : actual !== null ? "text-slate-400"
-                                  : "text-slate-500"
+                                  : actual !== null ? "text-slate-400" : "text-slate-500"
                                 }`}>
-                                  {p.driverName.split(" ").pop()}
-                                  {exact && " ✓"}
+                                  {p.driverName.split(" ").pop()}{exact && " ✓"}
                                 </div>
                               </td>
                             );
@@ -353,6 +356,34 @@ export function ResultsTabs({
                     })}
                   </tbody>
                 </table>
+              </div>
+              {/* Mobile: stacked cards per player */}
+              <div className="sm:hidden divide-y divide-slate-800">
+                {leaguePlayers.map((player) => {
+                  const isMe = player.userId === currentUserId;
+                  return (
+                    <div key={player.userId} className={`px-4 py-3 space-y-2 ${isMe ? "bg-red-950/20" : ""}`}>
+                      <p className={`text-sm font-semibold ${isMe ? "text-white" : "text-slate-300"}`}>
+                        {player.userName}{isMe && <span className="ml-1.5 text-xs text-red-400">(you)</span>}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {player.picks.map((p) => {
+                          const actual = actualPos.get(p.driverId) ?? null;
+                          const exact = actual === p.predictedPos;
+                          return (
+                            <span key={p.predictedPos} className={`text-xs px-2 py-0.5 rounded-full border ${
+                              exact
+                                ? "bg-emerald-900/40 border-emerald-800/50 text-emerald-300"
+                                : "bg-slate-800 border-slate-700 text-slate-400"
+                            }`}>
+                              P{p.predictedPos} {p.driverName.split(" ").pop()}{exact && " ✓"}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
