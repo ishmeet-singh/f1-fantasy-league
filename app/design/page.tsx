@@ -228,6 +228,218 @@ export default function DesignPage() {
         </div>
       </Section>
 
+      {/* ── IN DESIGN: PICKS UX REDESIGN ── */}
+      <Section title="◎ In Design — Picks Input UX (Mobile)">
+        <p className="text-sm text-slate-400 leading-relaxed">
+          Requested by players: replace the 10 dropdowns with a more touch-friendly interaction.
+          Three options being considered. Decision needed before build.
+        </p>
+
+        <div className="space-y-2 mt-2">
+          <Status status="design" label="Current state" note="10 native select dropdowns stacked. Works on desktop. Slow and fiddly on mobile." />
+          <Status status="design" label="Constraint" note="Race = pick 10 FROM 22 drivers AND order them. Quali = pick 3 from 22 and order them." />
+          <Status status="design" label="Decision needed" note="Which option to build? See wireframes below." />
+        </div>
+
+        {/* Option A */}
+        <div className="mt-6 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="bg-slate-800 border border-slate-600 text-white px-3 py-1 rounded-lg text-sm font-semibold">Option A</span>
+            <span className="text-white font-medium">Drag to reorder only</span>
+            <span className="text-slate-400 text-sm">— minimal change</span>
+          </div>
+          <p className="text-sm text-slate-400">
+            Keep the current selection mechanism (one driver per slot). Add drag handles so you can
+            reorder your list after filling it. Lowest effort, lowest gain — still requires 10 taps
+            to fill slots.
+          </p>
+          <Wireframe title="Option A — Race picks (mobile)">
+{`┌─────────────────────────────┐
+│ Race — Top 10                │
+│                              │
+│ ≡  P1  [Verstappen     ▼]   │  ← ≡ = drag handle
+│ ≡  P2  [Norris         ▼]   │
+│ ≡  P3  [Russell        ▼]   │
+│ ≡  P4  [Leclerc        ▼]   │
+│ ≡  P5  [Piastri        ▼]   │
+│ ≡  P6  [Hamilton       ▼]   │
+│ ≡  P7  [Antonelli      ▼]   │
+│ ≡  P8  [Albon          ▼]   │
+│ ≡  P9  [Hadjar         ▼]   │
+│ ≡  P10 [Lawson         ▼]   │
+│                              │
+│ [  Save picks  ]            │
+└─────────────────────────────┘
+
+Interaction:
+• Tap dropdown → native picker (same as now)
+• Long-press ≡ handle → drag row up/down
+• Positions auto-renumber as you drag
+
+Pro: Familiar, small change
+Con: Still 10 taps to fill. Drag+select = 2 UX modes`}
+          </Wireframe>
+        </div>
+
+        {/* Option B */}
+        <div className="mt-8 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="bg-blue-900/50 border border-blue-700 text-blue-200 px-3 py-1 rounded-lg text-sm font-semibold">Option B ★</span>
+            <span className="text-white font-medium">Tap to select + drag to order</span>
+            <span className="text-blue-400 text-sm">— recommended</span>
+          </div>
+          <p className="text-sm text-slate-400">
+            Two zones: a grid of all 22 driver chips at the bottom (pool), and a ranked list at
+            the top (your picks). Tap a driver chip → it fills the next available slot. Tap a
+            picked driver → removes them back to pool. Drag within the ranked list to reorder.
+          </p>
+          <Wireframe title="Option B — Race picks (mobile), empty state">
+{`┌─────────────────────────────┐
+│ Race — Pick your top 10      │
+│ Tap drivers to add · 0/10    │
+│                              │
+│ ┌──────────────────────────┐ │
+│ │  P1  ─ ─ ─ ─ ─ ─ ─ ─   │ │  ← empty slots
+│ │  P2  ─ ─ ─ ─ ─ ─ ─ ─   │ │
+│ │  P3  ─ ─ ─ ─ ─ ─ ─ ─   │ │
+│ │  ...                     │ │
+│ │  P10 ─ ─ ─ ─ ─ ─ ─ ─   │ │
+│ └──────────────────────────┘ │
+│                              │
+│ ┌──────────────────────────┐ │
+│ │ [Verstappen] [Norris]    │ │  ← driver chip grid
+│ │ [Russell]    [Leclerc]   │ │
+│ │ [Piastri]    [Hamilton]  │ │
+│ │ [Antonelli]  [Albon]     │ │
+│ │ [Hadjar]     [Lawson]    │ │
+│ │ [Hulkenberg] [Bearman]   │ │
+│ └──────────────────────────┘ │
+└─────────────────────────────┘`}
+          </Wireframe>
+          <Wireframe title="Option B — Race picks (mobile), 4 selected">
+{`┌─────────────────────────────┐
+│ Race — Pick your top 10      │
+│ Tap drivers to add · 4/10    │
+│                              │
+│ ┌──────────────────────────┐ │
+│ │ ≡ P1  Verstappen    ✕   │ │  ← filled, ≡ drag, ✕ remove
+│ │ ≡ P2  Norris        ✕   │ │
+│ │ ≡ P3  Russell       ✕   │ │
+│ │ ≡ P4  Leclerc       ✕   │ │
+│ │    P5  ─ ─ ─ ─ ─ ─ ─   │ │  ← still empty
+│ │    ...                   │ │
+│ └──────────────────────────┘ │
+│                              │
+│ ┌──────────────────────────┐ │
+│ │ [Piastri]    [Hamilton]  │ │  ← remaining pool
+│ │ [Antonelli]  [Albon]     │ │
+│ │ [Hadjar]     [Lawson]    │ │  (Verstappen/Norris/
+│ │ [Hulkenberg] [Bearman]   │ │   Russell/Leclerc gone)
+│ └──────────────────────────┘ │
+│                              │
+│ [  Save picks  ] disabled    │
+└─────────────────────────────┘
+
+Interaction:
+• Tap chip → jumps to next empty slot
+• Tap ✕ on picked driver → returns to pool
+• Long-press ≡ → drag to reorder
+
+Pro: Fast (10 taps to fill), clear visual
+Con: Two-panel = more vertical scroll`}
+          </Wireframe>
+        </div>
+
+        {/* Option C */}
+        <div className="mt-8 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="bg-slate-800 border border-slate-600 text-white px-3 py-1 rounded-lg text-sm font-semibold">Option C</span>
+            <span className="text-white font-medium">Ranked drag from pool</span>
+            <span className="text-slate-400 text-sm">— most powerful, most complex</span>
+          </div>
+          <p className="text-sm text-slate-400">
+            Single scrollable list. Top section is your ordered picks. Bottom section is the full
+            driver pool. Drag a driver up from the pool into your picks list at any position.
+            Drag within picks to reorder. Drag back down to remove.
+          </p>
+          <Wireframe title="Option C — Race picks (mobile), 3 picked">
+{`┌─────────────────────────────┐
+│ Race — Top 10  [3 / 10]      │
+├──────────────────────────────┤
+│ YOUR PICKS                   │
+│ ≡  1  Verstappen         ✕  │  ← drag handle, remove
+│ ≡  2  Norris             ✕  │
+│ ≡  3  Russell            ✕  │
+│                              │
+│ ┄ drag more drivers here ┄  │  ← drop zone hint
+├──────────────────────────────┤
+│ DRIVER POOL                  │
+│ ≡  Leclerc                  │  ← drag up to add
+│ ≡  Piastri                  │
+│ ≡  Hamilton                 │
+│ ≡  Antonelli                │
+│ ≡  Albon                    │
+│ ≡  Hadjar                   │
+│ ≡  Lawson                   │
+│     ... 12 more ...          │
+└─────────────────────────────┘
+
+Interaction:
+• Drag driver from pool UP into picks = add at position
+• Drag within picks = reorder
+• Drag driver from picks DOWN = remove
+
+Pro: Single unified list, most powerful
+Con: Hardest to implement, drag precision needed,
+     unclear "drop here" targets on small screens`}
+          </Wireframe>
+        </div>
+
+        {/* Comparison table */}
+        <div className="mt-8">
+          <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Comparison</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
+              <thead>
+                <tr className="border-b border-slate-800 text-left text-xs text-slate-500 uppercase">
+                  <th className="pb-2 pr-4">Criteria</th>
+                  <th className="pb-2 pr-4">Option A</th>
+                  <th className="pb-2 pr-4 text-blue-300">Option B ★</th>
+                  <th className="pb-2">Option C</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-300">
+                {[
+                  ["Mobile ease", "★★☆", "★★★", "★★☆"],
+                  ["Speed (10 picks)", "Slow", "Fast", "Medium"],
+                  ["Implementation effort", "Low", "Medium", "High"],
+                  ["Works without JS drag lib", "No", "Mostly", "No"],
+                  ["Clear mental model", "Yes", "Yes", "Requires learning"],
+                  ["Desktop friendly", "Yes", "Yes", "Yes"],
+                ].map(([c, a, b, cc]) => (
+                  <tr key={c} className="border-t border-slate-800/50">
+                    <td className="py-2 pr-4 text-slate-400">{c}</td>
+                    <td className="py-2 pr-4">{a}</td>
+                    <td className="py-2 pr-4 text-blue-300 font-medium">{b}</td>
+                    <td className="py-2">{cc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-4 p-4 rounded-xl bg-blue-950/30 border border-blue-800/40">
+          <p className="text-sm font-semibold text-blue-300">Recommendation: Option B</p>
+          <p className="text-sm text-slate-400 mt-1">
+            Best balance of UX improvement and implementation effort. Tap-to-add is immediately
+            intuitive, drag-to-reorder is a bonus. Can ship without a heavy drag library using
+            a simple swap-on-tap pattern first, then add drag later.
+          </p>
+          <p className="text-sm text-slate-500 mt-2 italic">Status: Awaiting decision from team before build.</p>
+        </div>
+      </Section>
+
       {/* ── FEATURE BACKLOG ── */}
       <Section title="Feature Backlog">
         <div className="space-y-2">
