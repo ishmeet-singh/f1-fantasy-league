@@ -1,6 +1,22 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const DRIVERS = [
   "Verstappen", "Norris", "Leclerc", "Piastri", "Russell",
@@ -11,75 +27,6 @@ const DRIVERS = [
 ];
 
 const MAX = 5;
-
-// ─── DRAG-SORT HOOK ──────────────────────────────────────
-//
-// Two key insights that make this work reliably:
-//
-// 1. Capture on the HANDLE itself (not a container). The handle received
-//    onPointerDown so it's allowed to call setPointerCapture. The container
-//    never received pointerdown, so setPointerCapture on it throws InvalidStateError.
-//
-// 2. Use INDEX keys on rows (key={i}), not content keys (key={driver}).
-//    Index keys mean React NEVER unmounts/remounts a row during reorder —
-//    it just updates the content. This keeps pointer capture alive.
-//    Content keys cause React to move DOM elements, releasing capture.
-
-function useDragSort<T>(initial: T[]) {
-  const [items, setItems] = useState<T[]>(initial);
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const rowRefs = useRef<(HTMLElement | null)[]>([]);
-  const dragIdxRef = useRef<number | null>(null);
-
-  const getClosestRow = (clientY: number): number => {
-    let best = 0, bestDist = Infinity;
-    rowRefs.current.forEach((el, i) => {
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const dist = Math.abs(clientY - (r.top + r.height / 2));
-      if (dist < bestDist) { bestDist = dist; best = i; }
-    });
-    return best;
-  };
-
-  // Returns event handlers to spread onto the drag handle <span>
-  const dragHandlers = (i: number) => ({
-    style: { touchAction: "none" } as React.CSSProperties,
-    className: "select-none cursor-grab active:cursor-grabbing px-2 text-slate-500 text-lg leading-none",
-    onPointerDown(e: React.PointerEvent<HTMLElement>) {
-      e.preventDefault();
-      // Capture pointer on the handle itself — safe because it received pointerdown
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragIdxRef.current = i;
-      setDragIdx(i);
-    },
-    onPointerMove(e: React.PointerEvent<HTMLElement>) {
-      if (dragIdxRef.current === null) return;
-      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-      const target = getClosestRow(e.clientY);
-      if (target === dragIdxRef.current) return;
-      setItems(prev => {
-        const next = [...prev];
-        const [moved] = next.splice(dragIdxRef.current!, 1);
-        next.splice(target, 0, moved);
-        return next;
-      });
-      dragIdxRef.current = target;
-      setDragIdx(target);
-    },
-    onPointerUp(e: React.PointerEvent<HTMLElement>) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      dragIdxRef.current = null;
-      setDragIdx(null);
-    },
-    onPointerCancel() {
-      dragIdxRef.current = null;
-      setDragIdx(null);
-    },
-  });
-
-  return { items, setItems, rowRefs, dragIdx, dragHandlers };
-}
 
 // ─── SHARED ──────────────────────────────────────────────
 
@@ -94,112 +41,185 @@ function SaveButton({ filled, total }: { filled: number; total: number }) {
   );
 }
 
-// ─── OPTION A: Dropdowns + drag-to-reorder ───────────────
-
-export function OptionAPrototype() {
-  const { items: picks, setItems: setPicks, rowRefs, dragIdx, dragHandlers } = useDragSort(
-    Array(MAX).fill("")
+function useDndSensors() {
+  return useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   );
+}
 
-  function set(i: number, val: string) {
-    const next = [...picks];
-    const existing = next.indexOf(val);
-    if (existing !== -1 && existing !== i) next[existing] = "";
-    next[i] = val;
-    setPicks(next);
-  }
+// ─── OPTION A: Dropdown rows + drag to reorder ───────────
+
+function SortableDropdownRow({
+  id, position, value, available, onChange
+}: {
+  id: string; position: number; value: string;
+  available: string[]; onChange: (v: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-slate-500 mb-3">Hold ⠿ and drag to reorder</p>
-      {/* KEY = INDEX so React reuses DOM elements instead of remounting */}
-      {picks.map((pick, i) => (
-        <div
-          key={i}
-          ref={el => { rowRefs.current[i] = el; }}
-          className={`flex items-center gap-2 rounded-lg transition-all ${dragIdx === i ? "opacity-40 scale-95" : ""}`}
-        >
-          <span {...dragHandlers(i)}>⠿</span>
-          <span className="text-slate-500 font-mono text-xs w-5 shrink-0 select-none">P{i + 1}</span>
-          <select
-            value={pick}
-            onChange={e => set(i, e.target.value)}
-            style={{ touchAction: "auto" }}
-            className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-          >
-            <option value="">Select driver…</option>
-            {DRIVERS.filter(d => d === pick || !picks.includes(d)).map(d => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-      ))}
-      <SaveButton filled={picks.filter(Boolean).length} total={MAX} />
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="flex items-center gap-2 rounded-lg"
+    >
+      {/* Drag handle */}
+      <span
+        {...listeners} {...attributes}
+        className="cursor-grab active:cursor-grabbing px-2 text-slate-500 text-lg leading-none select-none touch-none"
+      >⠿</span>
+      <span className="text-slate-500 font-mono text-xs w-5 shrink-0 select-none">P{position}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+      >
+        <option value="">Select driver…</option>
+        {available.map(d => <option key={d} value={d}>{d}</option>)}
+      </select>
     </div>
   );
 }
 
-// ─── OPTION B: Tap to add + drag-to-reorder ──────────────
-
-export function OptionBPrototype() {
-  const { items: picked, setItems: setPicked, rowRefs, dragIdx, dragHandlers } = useDragSort<string | null>(
-    Array(MAX).fill(null)
+export function OptionAPrototype() {
+  // Each slot is an object with a stable id + value
+  const [slots, setSlots] = useState(() =>
+    Array.from({ length: MAX }, (_, i) => ({ id: `slot-${i}`, value: "" }))
   );
+  const sensors = useDndSensors();
 
-  const filled = picked.filter(Boolean) as string[];
-  const pool = DRIVERS.filter(d => !filled.includes(d));
-
-  function tapAdd(driver: string) {
-    const emptySlot = picked.indexOf(null);
-    if (emptySlot === -1) return;
-    const next = [...picked];
-    next[emptySlot] = driver;
-    setPicked(next);
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setSlots(prev => {
+      const oldIdx = prev.findIndex(s => s.id === active.id);
+      const newIdx = prev.findIndex(s => s.id === over.id);
+      return arrayMove(prev, oldIdx, newIdx);
+    });
   }
 
-  function tapRemove(i: number) {
-    const next = [...picked];
-    next[i] = null;
-    // Compact: move nulls to end
-    const nonNull = next.filter(Boolean) as string[];
-    const withNulls = [...nonNull, ...Array(MAX - nonNull.length).fill(null)];
-    setPicked(withNulls);
+  function setValue(id: string, val: string) {
+    setSlots(prev => {
+      const next = prev.map(s => ({ ...s }));
+      // Clear this driver from any other slot
+      next.forEach(s => { if (s.value === val && s.id !== id) s.value = ""; });
+      const slot = next.find(s => s.id === id);
+      if (slot) slot.value = val;
+      return next;
+    });
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={slots.map(s => s.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500 mb-3">Hold ⠿ and drag to reorder</p>
+          {slots.map((slot, i) => (
+            <SortableDropdownRow
+              key={slot.id}
+              id={slot.id}
+              position={i + 1}
+              value={slot.value}
+              available={DRIVERS.filter(d => d === slot.value || !slots.some(s => s.value === d))}
+              onChange={val => setValue(slot.id, val)}
+            />
+          ))}
+          <SaveButton filled={slots.filter(s => s.value).length} total={MAX} />
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+// ─── OPTION B: Tap to add + drag to reorder ──────────────
+
+function SortablePickRow({
+  id, position, driver, onRemove
+}: {
+  id: string; position: number; driver: string; onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="flex items-center gap-2 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm select-none"
+    >
+      <span
+        {...listeners} {...attributes}
+        className="cursor-grab active:cursor-grabbing px-1 text-slate-500 text-lg leading-none touch-none"
+      >⠿</span>
+      <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{position}</span>
+      <span className="flex-1 text-white font-medium">{driver}</span>
+      <button
+        onClick={onRemove}
+        className="text-slate-500 hover:text-red-400 text-sm px-1"
+      >✕</button>
+    </div>
+  );
+}
+
+export function OptionBPrototype() {
+  const [picked, setPicked] = useState<{ id: string; driver: string }[]>([]);
+  const sensors = useDndSensors();
+  const pool = DRIVERS.filter(d => !picked.some(p => p.driver === d));
+
+  function add(driver: string) {
+    if (picked.length >= MAX) return;
+    setPicked(prev => [...prev, { id: `pick-${driver}`, driver }]);
+  }
+
+  function remove(id: string) {
+    setPicked(prev => prev.filter(p => p.id !== id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setPicked(prev => {
+      const oldIdx = prev.findIndex(p => p.id === active.id);
+      const newIdx = prev.findIndex(p => p.id === over.id);
+      return arrayMove(prev, oldIdx, newIdx);
+    });
   }
 
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs text-slate-500 mb-2">Your picks — {filled.length}/{MAX} · hold ⠿ to reorder</p>
-        {/* KEY = INDEX */}
-        <div className="space-y-1.5">
-          {picked.map((driver, i) => (
-            <div
-              key={i}
-              ref={el => { rowRefs.current[i] = el; }}
-              className={`flex items-center gap-2 rounded-lg text-sm transition-all ${
-                driver
-                  ? `bg-slate-800 border border-slate-700 px-3 py-2 ${dragIdx === i ? "opacity-40 scale-95" : ""}`
-                  : "border border-dashed border-slate-700/40 px-3 py-2 opacity-30"
-              }`}
-            >
-              {driver
-                ? <span {...dragHandlers(i)}>⠿</span>
-                : <span className="w-7 shrink-0" />}
-              <span className="text-slate-500 font-mono text-xs w-5 shrink-0 select-none">P{i + 1}</span>
-              <span className={`flex-1 ${driver ? "text-white font-medium" : "text-slate-600"}`}>
-                {driver ?? "─ ─ ─ ─ ─"}
-              </span>
-              {driver && (
-                <button
-                  style={{ touchAction: "auto" }}
-                  onPointerDown={e => e.stopPropagation()}
-                  onClick={() => tapRemove(i)}
-                  className="text-slate-500 hover:text-red-400 text-sm px-1 select-none"
-                >✕</button>
-              )}
+        <p className="text-xs text-slate-500 mb-2">Your picks — {picked.length}/{MAX} · hold ⠿ to reorder</p>
+
+        {/* Empty slots (visual only) */}
+        {picked.length < MAX && (
+          <div className="space-y-1.5 mb-1.5">
+            {Array.from({ length: MAX - picked.length }, (_, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-lg border border-dashed border-slate-700/40 px-3 py-2 opacity-30">
+                <span className="w-7 shrink-0" />
+                <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{picked.length + i + 1}</span>
+                <span className="text-slate-600 text-sm">─ ─ ─ ─ ─</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={picked.map(p => p.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-1.5">
+              {picked.map((p, i) => (
+                <SortablePickRow
+                  key={p.id}
+                  id={p.id}
+                  position={i + 1}
+                  driver={p.driver}
+                  onRemove={() => remove(p.id)}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       </div>
 
       <div>
@@ -208,8 +228,8 @@ export function OptionBPrototype() {
           {pool.map(d => (
             <button
               key={d}
-              onClick={() => tapAdd(d)}
-              disabled={filled.length >= MAX}
+              onClick={() => add(d)}
+              disabled={picked.length >= MAX}
               className="px-3 py-1.5 rounded-full text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-500 disabled:opacity-30 active:scale-95 transition-all"
             >
               {d}
@@ -218,7 +238,7 @@ export function OptionBPrototype() {
         </div>
       </div>
 
-      <SaveButton filled={filled.length} total={MAX} />
+      <SaveButton filled={picked.length} total={MAX} />
     </div>
   );
 }
@@ -226,12 +246,31 @@ export function OptionBPrototype() {
 // ─── OPTION C: Unified picks + pool ──────────────────────
 
 export function OptionCPrototype() {
-  const { items: picked, setItems: setPicked, rowRefs, dragIdx, dragHandlers } = useDragSort<string>([]);
-  const pool = DRIVERS.filter(d => !picked.includes(d));
+  const [picked, setPicked] = useState<{ id: string; driver: string }[]>([]);
+  const sensors = useDndSensors();
+  const pool = DRIVERS.filter(d => !picked.some(p => p.driver === d));
+
+  function add(driver: string) {
+    if (picked.length >= MAX) return;
+    setPicked(prev => [...prev, { id: `pick-${driver}`, driver }]);
+  }
+
+  function remove(id: string) {
+    setPicked(prev => prev.filter(p => p.id !== id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setPicked(prev => {
+      const oldIdx = prev.findIndex(p => p.id === active.id);
+      const newIdx = prev.findIndex(p => p.id === over.id);
+      return arrayMove(prev, oldIdx, newIdx);
+    });
+  }
 
   return (
     <div className="rounded-xl border border-slate-700 overflow-hidden">
-      {/* Picks */}
       <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Your picks</span>
         <span className="text-xs text-slate-500">{picked.length}/{MAX} · hold ⠿ to reorder</span>
@@ -242,29 +281,23 @@ export function OptionCPrototype() {
           ↓ tap a driver below to add
         </div>
       ) : (
-        <div className="divide-y divide-slate-800/60">
-          {/* KEY = INDEX */}
-          {picked.map((d, i) => (
-            <div
-              key={i}
-              ref={el => { rowRefs.current[i] = el; }}
-              className={`flex items-center gap-3 px-4 py-2.5 select-none transition-all ${dragIdx === i ? "opacity-40 scale-95" : ""}`}
-            >
-              <span {...dragHandlers(i)}>⠿</span>
-              <span className="text-slate-500 font-mono text-xs w-5 shrink-0">P{i + 1}</span>
-              <span className="flex-1 text-white text-sm font-medium">{d}</span>
-              <button
-                style={{ touchAction: "auto" }}
-                onPointerDown={e => e.stopPropagation()}
-                onClick={() => setPicked(prev => prev.filter(p => p !== d))}
-                className="text-red-500/50 hover:text-red-400 text-xs"
-              >✕</button>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={picked.map(p => p.id)} strategy={verticalListSortingStrategy}>
+            <div className="divide-y divide-slate-800/60">
+              {picked.map((p, i) => (
+                <SortablePickRow
+                  key={p.id}
+                  id={p.id}
+                  position={i + 1}
+                  driver={p.driver}
+                  onRemove={() => remove(p.id)}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       )}
 
-      {/* Pool */}
       <div className="px-4 py-2 border-t border-b border-slate-800 flex items-center justify-between bg-slate-900/40">
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Driver pool</span>
         <span className="text-xs text-slate-600">{pool.length} remaining</span>
@@ -273,7 +306,7 @@ export function OptionCPrototype() {
         {pool.map(d => (
           <button
             key={d}
-            onClick={() => { if (picked.length < MAX) setPicked(prev => [...prev, d]); }}
+            onClick={() => add(d)}
             disabled={picked.length >= MAX}
             className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800/60 disabled:opacity-30 text-left active:bg-slate-700/60"
           >
