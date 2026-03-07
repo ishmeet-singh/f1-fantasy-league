@@ -45,10 +45,10 @@ function SaveButton({ filled, total }: { filled: number; total: number }) {
 
 function useDndSensors() {
   return useSensors(
-    // distance: 3 — starts drag after 3px movement, no delay
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-    // distance only (no delay) — drag starts as soon as finger moves 8px
-    useSensor(TouchSensor, { activationConstraint: { distance: 8 } })
+    // delay:100 prevents scroll/drag conflicts on vertical lists.
+    // tolerance:8 means finger can wiggle 8px during the hold without cancelling.
+    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 8 } })
   );
 }
 
@@ -167,7 +167,7 @@ function SortablePickRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`group flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm select-none cursor-grab active:cursor-grabbing transition-colors ${
+      className={`group flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm select-none cursor-grab active:cursor-grabbing active:bg-slate-700 active:border-slate-500 active:scale-[0.98] transition-all ${
         isDragging
           ? "opacity-30 bg-slate-800 border-slate-600"
           : "bg-slate-800 border-slate-700 hover:border-slate-500"
@@ -182,7 +182,8 @@ function SortablePickRow({
 // Floating ghost shown during drag
 function DragOverlayRow({ position, driver }: { position: number; driver: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-slate-700 border border-red-500/60 px-3 py-2.5 text-sm shadow-2xl shadow-black/60 select-none cursor-grabbing scale-105">
+    <div className="flex items-center gap-2 rounded-lg bg-slate-600 border border-red-400/80 px-3 py-2.5 text-sm shadow-2xl shadow-black/80 select-none cursor-grabbing ring-2 ring-red-500/30"
+      style={{ transform: "scale(1.04)" }}>
       <PickRowContent position={position} driver={driver} isOverlay />
     </div>
   );
