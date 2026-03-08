@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { bestNWeekendTotal } from "@/lib/scoring";
 import { syncCalendar } from "@/lib/sync";
+import { fetchF1DriverStandings, type F1DriverStanding } from "@/lib/jolpi";
 
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
@@ -133,6 +134,11 @@ export async function getLastCompletedRace(userId?: string): Promise<{
   }
 
   return { ...bestRace, userScore };
+}
+
+// F1 official driver championship standings
+export async function getF1Championship(): Promise<F1DriverStanding[]> {
+  return fetchF1DriverStandings(new Date().getUTCFullYear());
 }
 
 // Per-race points history for ALL players — used for expandable leaderboard rows

@@ -69,6 +69,24 @@ export async function fetchJolpiDriverStandings(year: number): Promise<JolpiDriv
   }
 }
 
+export type F1DriverStanding = {
+  position: string;
+  points: string;
+  wins: string;
+  Driver: { driverId: string; code?: string; givenName: string; familyName: string; nationality: string };
+  Constructors: { name: string }[];
+};
+
+export async function fetchF1DriverStandings(year: number): Promise<F1DriverStanding[]> {
+  try {
+    const data = await fetchJson<JolpiStandingsResponse>(`/f1/${year}/driverstandings/?limit=30`);
+    const list = data.MRData.StandingsTable.StandingsLists?.[0]?.DriverStandings ?? [];
+    return list as unknown as F1DriverStanding[];
+  } catch {
+    return [];
+  }
+}
+
 type JolpiDriverEntry = {
   driverId: string;
   givenName: string;

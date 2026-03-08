@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
-  getLeaderboard, getNextRace, getPersonalStats, getSeasonProgress,
-  getLastCompletedRace, getPointsHistory
+  getLeaderboard, getNextRace, getSeasonProgress,
+  getLastCompletedRace, getPointsHistory, getF1Championship
 } from "@/lib/data";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -9,6 +9,8 @@ import { Countdown } from "@/components/countdown";
 import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
 import { LeaderboardFull } from "@/components/leaderboard-full";
+import { FantasyChart } from "@/components/fantasy-chart";
+import { F1Standings } from "@/components/f1-standings";
 
 export const dynamic = "force-dynamic";
 
@@ -17,16 +19,16 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   const admin = getSupabaseAdmin();
 
-  const [leaderboard, nextRace, season, personalStats, lastRace, history] = await Promise.all([
+  const [leaderboard, nextRace, season, lastRace, history, f1Standings] = await Promise.all([
     getLeaderboard(),
     getNextRace(),
     getSeasonProgress(),
-    user ? getPersonalStats(user.id) : Promise.resolve(null),
     user ? getLastCompletedRace(user.id) : getLastCompletedRace(),
     getPointsHistory(),
+    getF1Championship(),
   ]);
 
-  // My picks for next race
+  // My picks for next race (for the picks reminder)
   const myNextPicks = user && nextRace
     ? await admin
         .from("predictions")
@@ -37,11 +39,6 @@ export default async function DashboardPage() {
         .then(r => r.data ?? [])
     : [];
 
-  const picksByEvent = {
-    quali: myNextPicks.filter(p => p.event_type === "quali"),
-    sprint: myNextPicks.filter(p => p.event_type === "sprint"),
-    race: myNextPicks.filter(p => p.event_type === "race"),
-  };
   const totalPicksSubmitted = myNextPicks.length;
   const WINDOW_HOURS = 48;
   const picksWindowOpen = nextRace
@@ -55,7 +52,7 @@ export default async function DashboardPage() {
       {lastRace && (
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/50 text-sm flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-slate-500 shrink-0">Last race</span>
+            <span className="text-slate-500 shrink-0 text-xs">Last race</span>
             <span className="font-medium text-slate-200 truncate">{lastRace.grand_prix}</span>
             {lastRace.userScore !== null && (
               <>
@@ -64,10 +61,8 @@ export default async function DashboardPage() {
               </>
             )}
           </div>
-          <Link
-            href={`/results?race=${lastRace.id}`}
-            className="text-xs text-slate-400 hover:text-white transition-colors shrink-0"
-          >
+          <Link href={`/results?race=${lastRace.id}`}
+            className="text-xs text-slate-400 hover:text-white transition-colors shrink-0">
             See full results →
           </Link>
         </div>
@@ -76,26 +71,47 @@ export default async function DashboardPage() {
       {/* ── Season progress ── */}
       {season.total > 0 && (
         <div className="flex items-center gap-3 text-xs text-slate-500">
-          <span>2026 Season</span>
+          <span className="shrink-0">2026 Season</span>
           <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-red-600 rounded-full transition-all"
-              style={{ width: `${Math.round((season.past / season.total) * 100)}%` }}
-            />
+            <div className="h-full bg-red-600 rounded-full transition-all"
+              style={{ width: `${Math.round((season.past / season.total) * 100)}%` }} />
           </div>
-          <span>{season.past}/{season.total} races</span>
+          <span className="shrink-0">{season.past}/{season.total} races</span>
         </div>
       )}
 
-      {/* ── Top row: next race (small) + my season ── */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Next race */}
+      {/* ── Leaderboard (centrepiece) ── */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-lg">Leaderboard</h2>
+          <span className="text-xs text-slate-500">Best 20 races · tap row for history</span>
+        </div>
+        <LeaderboardFull
+          leaderboard={leaderboard}
+          history={history}
+          currentUserId={user?.id ?? null}
+        />
+      </div>
+
+      {/* ── Middle row: chart + next race ── */}
+      <div className="grid gap-4 lg:grid-cols-3">
+
+        {/* Fantasy progression chart (2/3 width on desktop) */}
+        <div className="lg:col-span-2 card space-y-3">
+          <div>
+            <h3 className="font-semibold">Points Progression</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Cumulative points per race</p>
+          </div>
+          <FantasyChart history={history} currentUserId={user?.id ?? null} />
+        </div>
+
+        {/* Next race (1/3 width on desktop) */}
         <div className="card space-y-3">
           {nextRace ? (
             <>
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Next Race</p>
-                <h2 className="text-lg font-bold leading-tight">{nextRace.grand_prix}</h2>
+                <h3 className="text-lg font-bold leading-tight">{nextRace.grand_prix}</h3>
               </div>
               {(() => {
                 const now = new Date();
@@ -113,122 +129,50 @@ export default async function DashboardPage() {
                   ...(nextRace.has_sprint && nextRace.sprint_start ? [{ label: "Sprint", iso: nextRace.sprint_start }] : []),
                   { label: "Race", iso: nextRace.race_start }
                 ].map(({ label, iso }) => (
-                  <div key={label} className="flex justify-between gap-4">
+                  <div key={label} className="flex justify-between gap-2">
                     <span>{label}</span>
-                    <span className="text-slate-400"><LocalTime iso={iso} opts={SESSION_OPTS} /></span>
+                    <span className="text-slate-400 text-right"><LocalTime iso={iso} opts={SESSION_OPTS} /></span>
                   </div>
                 ))}
               </div>
+
+              {/* Picks reminder */}
+              {picksWindowOpen && (
+                <div className={`rounded-lg px-3 py-2 text-xs ${
+                  totalPicksSubmitted > 0
+                    ? "bg-emerald-900/30 border border-emerald-800/40 text-emerald-300"
+                    : "bg-red-950/40 border border-red-900/50 text-red-300"
+                }`}>
+                  {totalPicksSubmitted > 0 ? "✓ Picks submitted" : "⚠ No picks yet — window open"}
+                </div>
+              )}
+
               <Link href={`/picks?race=${nextRace.id}`}
-                className="inline-block rounded bg-red-600 hover:bg-red-500 transition-colors px-4 py-2 text-sm font-medium">
-                Make picks →
+                className="block text-center rounded bg-red-600 hover:bg-red-500 transition-colors px-4 py-2 text-sm font-medium">
+                {totalPicksSubmitted > 0 ? "Edit picks →" : "Make picks →"}
               </Link>
             </>
           ) : (
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500 uppercase tracking-widest">Next Race</p>
-              <p className="text-slate-400 text-sm">Season complete or calendar not loaded.</p>
-            </div>
-          )}
-        </div>
-
-        {/* My season */}
-        <div className="card space-y-3">
-          <p className="text-xs text-slate-500 uppercase tracking-widest">My Season</p>
-          {personalStats ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <Stat label="Rank" value={`#${personalStats.rank}`} accent />
-                <Stat label="Points" value={String(personalStats.totalPoints)} />
-                <Stat label="Best Race" value={`${personalStats.bestWeekend} pts`} />
-                <Stat label="Exact Hits" value={String(personalStats.exactMatches)} />
-              </div>
-            </>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-slate-400 text-sm">No scores yet.</p>
-              <p className="text-xs text-slate-600">Make your first picks to appear on the leaderboard.</p>
-              <Link href="/picks" className="text-sm text-red-400 hover:text-red-300 transition-colors">Make picks →</Link>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Next Race</p>
+              <p className="text-slate-400 text-sm">Season complete</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── My picks for next race ── */}
-      {nextRace && picksWindowOpen && (
-        <div className="card space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500 uppercase tracking-widest">
-              My Picks · {nextRace.grand_prix}
-            </p>
-            <Link href={`/picks?race=${nextRace.id}`}
-              className="text-xs text-red-400 hover:text-red-300 transition-colors">
-              {totalPicksSubmitted > 0 ? "Edit picks →" : "Make picks →"}
-            </Link>
-          </div>
-          {totalPicksSubmitted === 0 ? (
-            <div className="flex items-center gap-3 rounded-lg bg-red-950/30 border border-red-900/40 px-4 py-3">
-              <span className="text-red-400 text-lg">⚠️</span>
-              <div>
-                <p className="text-sm font-medium text-red-300">No picks submitted yet</p>
-                <p className="text-xs text-slate-500 mt-0.5">Window is open — submit before qualifying starts</p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
-              {(["quali", "sprint", "race"] as const)
-                .filter(et => et !== "sprint" || nextRace.has_sprint)
-                .map(et => {
-                  const picks = picksByEvent[et];
-                  const label = et === "quali" ? "Qualifying" : et === "sprint" ? "Sprint" : "Race";
-                  return (
-                    <div key={et} className="space-y-1.5">
-                      <p className="text-xs text-slate-500 font-medium">{label}</p>
-                      {picks.length === 0 ? (
-                        <p className="text-xs text-slate-600 italic">Not submitted</p>
-                      ) : (
-                        picks.map(p => {
-                          const driverName = Array.isArray(p.drivers)
-                            ? p.drivers[0]?.name
-                            : (p.drivers as { name: string } | null)?.name ?? "Unknown";
-                          return (
-                            <div key={p.predicted_position} className="flex items-center gap-2 text-xs">
-                              <span className="font-mono text-slate-500 w-5">P{p.predicted_position}</span>
-                              <span className="text-slate-300 truncate">{driverName}</span>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Full leaderboard (centrepiece) ── */}
+      {/* ── F1 Official Championship ── */}
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Leaderboard</h2>
-          <span className="text-xs text-slate-500">Best 20 races · click row for history</span>
+          <div>
+            <h3 className="font-semibold">F1 Driver Championship</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Official {new Date().getUTCFullYear()} standings</p>
+          </div>
+          <span className="text-xs text-slate-600">Top 10</span>
         </div>
-        <LeaderboardFull
-          leaderboard={leaderboard}
-          history={history}
-          currentUserId={user?.id ?? null}
-        />
+        <F1Standings standings={f1Standings} />
       </div>
 
-    </div>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="bg-slate-800/50 rounded-lg p-3">
-      <p className="text-xs text-slate-500 mb-1">{label}</p>
-      <p className={`text-xl font-bold ${accent ? "text-red-400" : "text-white"}`}>{value}</p>
     </div>
   );
 }
