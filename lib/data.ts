@@ -4,23 +4,29 @@ import { syncCalendar } from "@/lib/sync";
 
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
-  // 12h lookback: shows a race as "current" while it's running or just finished.
-  // After 12h the race is over and the next upcoming race takes over.
-  const lookback = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-  const { data } = await supabase
+
+  // A race is "done" when race results exist in the DB.
+  // Next race = earliest race weekend with NO race results yet.
+  const { data: racesWithResults } = await supabase
+    .from("results")
+    .select("race_id")
+    .eq("event_type", "race");
+
+  const completedIds = new Set((racesWithResults ?? []).map(r => r.race_id));
+
+  const { data: allRaces } = await supabase
     .from("race_weekends")
     .select("*")
-    .gte("race_start", lookback)
-    .order("race_start", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return data;
+    .order("race_start", { ascending: true });
+
+  const next = (allRaces ?? []).find(r => !completedIds.has(r.id));
+  return next ?? null;
 }
 
 export async function getNextRace() {
   let race = await fetchNextRaceFromDb();
 
-  // If DB has no upcoming races, auto-populate via syncCalendar (uses OpenF1 primary)
+  // If nothing found, DB might be empty — auto-populate and retry
   if (!race) {
     try {
       await syncCalendar();
@@ -35,12 +41,17 @@ export async function getNextRace() {
 
 export async function getSeasonProgress() {
   const supabase = getSupabaseAdmin();
-  const now = new Date().toISOString();
-  const { data: all } = await supabase.from("race_weekends").select("race_start,quali_start");
-  const total = all?.length || 0;
-  // A race is "past" when its quali has started (more reliable than race_start
-  // which may be stored as the Friday meeting start on some sync sources).
-  const past = all?.filter((r) => (r.quali_start || r.race_start) < now).length || 0;
+
+  const [{ data: allRaces }, { data: completedResults }] = await Promise.all([
+    supabase.from("race_weekends").select("id"),
+    // A race is "completed" when race results exist for it
+    supabase.from("results").select("race_id").eq("event_type", "race")
+  ]);
+
+  const total = allRaces?.length ?? 0;
+  const completedIds = new Set((completedResults ?? []).map(r => r.race_id));
+  const past = completedIds.size;
+
   return { total, past };
 }
 

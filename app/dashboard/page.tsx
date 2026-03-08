@@ -79,7 +79,7 @@ export default async function DashboardPage() {
                 <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Next Race</p>
                 <h2 className="text-xl font-bold leading-tight">{nextRace.grand_prix}</h2>
               </div>
-              {/* Count down to the next upcoming session of the weekend */}
+              {/* Count down to the next session that hasn't started yet */}
               {(() => {
                 const now = new Date();
                 if (new Date(nextRace.quali_start) > now)
@@ -88,7 +88,8 @@ export default async function DashboardPage() {
                   return <Countdown target={nextRace.sprint_start} label="Sprint in" />;
                 if (new Date(nextRace.race_start) > now)
                   return <Countdown target={nextRace.race_start} label="Race in" />;
-                return <p className="text-sm text-slate-400">Race weekend in progress</p>;
+                // Race hasn't appeared in results yet but sessions are all past
+                return <Countdown target={nextRace.race_start} label="Race" />;
               })()}
               <div className="text-xs text-slate-500 space-y-2 border-t border-slate-800 pt-3">
                 {[
