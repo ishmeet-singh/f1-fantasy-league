@@ -125,3 +125,19 @@ export async function fetchAllJolpiSprintResults(year: number): Promise<BulkResu
 export function jolpiRaceId(year: number, round: string) {
   return `jolpi-${year}-${round}`;
 }
+
+// Find the Jolpi round number that matches a given race date (±2 days tolerance)
+// Used to cross-reference OpenF1 races with Jolpi results
+export async function findJolpiRoundByDate(year: number, raceDateIso: string): Promise<string | null> {
+  try {
+    const races = await fetchJolpiRaces(year);
+    const target = new Date(raceDateIso).getTime();
+    const match = races.find(r => {
+      const raceTime = new Date(`${r.date}T${r.time.endsWith("Z") ? r.time : r.time + "Z"}`).getTime();
+      return Math.abs(raceTime - target) < 2 * 24 * 60 * 60 * 1000; // within 2 days
+    });
+    return match?.round ?? null;
+  } catch {
+    return null;
+  }
+}

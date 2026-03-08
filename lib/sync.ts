@@ -3,8 +3,12 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { recomputeAllScores } from "@/lib/recompute";
 import { EventType } from "@/lib/types";
 import { syncCalendarJolpi, syncResultsJolpi } from "@/lib/sync-jolpi";
-
-const eventTypes: EventType[] = ["quali", "sprint", "race"];
+import {
+  findJolpiRoundByDate,
+  fetchAllJolpiRaceResults,
+  fetchAllJolpiQualiResults,
+  fetchAllJolpiSprintResults,
+} from "@/lib/jolpi";
 
 function findSessionStart(sessions: { session_name: string; date_start: string }[], names: string[]) {
   const found = sessions.find((session) => names.includes(session.session_name));
@@ -60,45 +64,108 @@ export async function syncCalendar(year = new Date().getUTCFullYear()) {
 
 async function syncResultsOpenF1() {
   const supabaseAdmin = getSupabaseAdmin();
+  const now = Date.now();
+
+  // CRITICAL FIX: only query races that have ALREADY STARTED and are within the last 7 days.
+  // Previously this queried all 24 races (including 23 future ones), causing ~72 sequential
+  // API calls and Vercel's 60s timeout — results never saved.
   const { data: races } = await supabaseAdmin
     .from("race_weekends")
     .select("id,has_sprint,race_start")
-    .not("id", "like", "jolpi-%"); // skip Jolpi-sourced races
+    .not("id", "like", "jolpi-%")
+    .lte("race_start", new Date().toISOString())                                    // race has started
+    .gte("race_start", new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString());     // within last 7 days
 
-  if (!races) return;
+  if (!races?.length) {
+    console.log("OpenF1 sync: no races in window");
+    return;
+  }
+
+  console.log(`OpenF1 sync: processing ${races.length} race(s)`);
 
   for (const race of races) {
-    const raceTime = new Date(race.race_start).getTime();
-    const now = Date.now();
-    if (Number.isFinite(raceTime) && now - raceTime > 48 * 60 * 60 * 1000) continue;
+    const year = new Date(race.race_start).getUTCFullYear();
+    const eventsToSync: EventType[] = ["quali", "race"];
+    if (race.has_sprint) eventsToSync.push("sprint");
 
-    for (const eventType of eventTypes) {
-      if (eventType === "sprint" && !race.has_sprint) continue;
-      const rows = await fetchSessionResults(Number(race.id), eventType);
-      for (const row of rows) {
-        await supabaseAdmin.from("results").upsert({
-          race_id: race.id,
-          event_type: eventType,
-          driver_id: row.driver_number,
-          actual_position: row.position || 20
-        });
-      }
-    }
+    // Fetch all event types in parallel — 3 API calls at once instead of sequential
+    await Promise.allSettled(
+      eventsToSync.map(async (eventType) => {
+        let rows: { driver_number: string; position: number }[] = [];
+
+        // Try OpenF1 first
+        try {
+          rows = await fetchSessionResults(Number(race.id), eventType);
+          if (rows.length) console.log(`[${race.id}/${eventType}] OpenF1 returned ${rows.length} results`);
+        } catch (e) {
+          console.warn(`[${race.id}/${eventType}] OpenF1 fetch failed:`, e);
+        }
+
+        // Jolpi fallback — if OpenF1 has no results yet, try Jolpi bulk data
+        if (!rows.length) {
+          try {
+            const round = await findJolpiRoundByDate(year, race.race_start);
+            if (round) {
+              const bulkFetch = eventType === "quali"
+                ? fetchAllJolpiQualiResults
+                : eventType === "sprint"
+                ? fetchAllJolpiSprintResults
+                : fetchAllJolpiRaceResults;
+              const allResults = await bulkFetch(year);
+              const jolpiRows = allResults.get(round) ?? [];
+              if (jolpiRows.length) {
+                rows = jolpiRows.map(r => ({ driver_number: r.driverId, position: r.position }));
+                console.log(`[${race.id}/${eventType}] Jolpi fallback returned ${rows.length} results`);
+              }
+            }
+          } catch (e) {
+            console.warn(`[${race.id}/${eventType}] Jolpi fallback failed:`, e);
+          }
+        }
+
+        if (!rows.length) {
+          console.log(`[${race.id}/${eventType}] No results from either API yet`);
+          return;
+        }
+
+        // Batch upsert with onConflict — safe to re-run multiple times
+        const upsertRows = rows
+          .filter(r => r.position >= 1 && r.position <= 22)
+          .map(r => ({
+            race_id: race.id,
+            event_type: eventType,
+            driver_id: r.driver_number,
+            actual_position: r.position
+          }));
+
+        if (!upsertRows.length) return;
+
+        const { error } = await supabaseAdmin
+          .from("results")
+          .upsert(upsertRows, { onConflict: "race_id,event_type,driver_id" });
+
+        if (error) {
+          console.error(`[${race.id}/${eventType}] DB upsert failed:`, error.message);
+        } else {
+          console.log(`[${race.id}/${eventType}] Saved ${upsertRows.length} results ✓`);
+        }
+      })
+    );
   }
 }
 
 export async function syncResults() {
-  // Run both in parallel — OpenF1 handles its own races, Jolpi handles its own races
-  const results = await Promise.allSettled([
+  console.log("syncResults started");
+
+  // Run both source syncs in parallel
+  const [openF1Result, jolpiResult] = await Promise.allSettled([
     syncResultsOpenF1(),
     syncResultsJolpi()
   ]);
 
-  for (const r of results) {
-    if (r.status === "rejected") {
-      console.warn("Results sync partial failure:", r.reason);
-    }
-  }
+  if (openF1Result.status === "rejected") console.error("OpenF1 sync failed:", openF1Result.reason);
+  if (jolpiResult.status === "rejected") console.error("Jolpi sync failed:", jolpiResult.reason);
 
   await recomputeAllScores();
+  console.log("syncResults complete");
 }
