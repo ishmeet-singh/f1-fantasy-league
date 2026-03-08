@@ -4,7 +4,9 @@ import { syncCalendar } from "@/lib/sync";
 
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
-  const lookback = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  // 12h lookback: shows a race as "current" while it's running or just finished.
+  // After 12h the race is over and the next upcoming race takes over.
+  const lookback = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from("race_weekends")
     .select("*")
