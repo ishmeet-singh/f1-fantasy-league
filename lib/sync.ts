@@ -17,7 +17,9 @@ function findSessionStart(sessions: { session_name: string; date_start: string }
 
 async function syncCalendarOpenF1(year: number) {
   const supabaseAdmin = getSupabaseAdmin();
-  const [meetings, drivers] = await Promise.all([fetchMeetings(year), fetchDrivers()]);
+  // Fetch drivers from the latest session; filter out any where full_name is missing
+  const [meetings, allDrivers] = await Promise.all([fetchMeetings(year), fetchDrivers()]);
+  const drivers = allDrivers.filter(d => d.full_name && String(d.full_name).trim() !== "");
 
   for (const d of drivers) {
     await supabaseAdmin.from("drivers").upsert({

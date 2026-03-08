@@ -116,8 +116,9 @@ export default async function ResultsPage({
       userId: u.id,
       userName: u.display_name || u.email.split("@")[0],
       picks: userPicks.map(p => {
-        const dn = Array.isArray(p.drivers) ? p.drivers[0]?.name : (p.drivers as { name: string } | null)?.name ?? p.driver_id;
-        return { predictedPos: p.predicted_position, driverId: p.driver_id, driverName: dn ?? p.driver_id, eventType: p.event_type as TabId };
+        const dn = Array.isArray(p.drivers) ? p.drivers[0]?.name : (p.drivers as { name: string } | null)?.name;
+        const driverName = dn && dn !== p.driver_id ? dn : `#${p.driver_id}`;
+        return { predictedPos: p.predicted_position, driverId: p.driver_id, driverName, eventType: p.event_type as TabId };
       }),
       scores: scoresByEt
     };

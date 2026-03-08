@@ -153,7 +153,7 @@ function SessionCard({
                         <span className={`font-mono text-xs font-bold ${exact ? "text-emerald-400" : "text-slate-300"}`}>
                           P{p.actual}{exact ? " ✓" : ""}
                         </span>
-                      ) : <span className="text-slate-600 text-xs">{hasResults ? `Outside top ${results.length}` : "—"}</span>}
+                      ) : <span className="text-slate-600 text-xs">{hasResults ? "Not classified" : "—"}</span>}
                     </td>
                     <td className="px-4 py-2 text-right">
                       {p.pts !== null ? (
