@@ -66,56 +66,105 @@ async function syncResultsOpenF1() {
   const supabaseAdmin = getSupabaseAdmin();
   const now = Date.now();
 
-  // CRITICAL FIX: only query races that have ALREADY STARTED and are within the last 7 days.
-  // Previously this queried all 24 races (including 23 future ones), causing ~72 sequential
-  // API calls and Vercel's 60s timeout — results never saved.
+  // Window: races whose weekend has started (quali is typically 2 days before race)
+  // or will start within 3 days (so we catch qualifying before race_start passes).
+  // Lower bound: 7 days ago (don't re-sync old completed races).
+  // At most 2 races in window at any point in the season.
+  const windowStart = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const windowEnd   = new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString();
+
   const { data: races } = await supabaseAdmin
     .from("race_weekends")
-    .select("id,has_sprint,race_start")
+    .select("id,has_sprint,race_start,quali_start")
     .not("id", "like", "jolpi-%")
-    .lte("race_start", new Date().toISOString())                                    // race has started
-    .gte("race_start", new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString());     // within last 7 days
+    .gte("race_start", windowStart)   // not older than 7 days
+    .lte("race_start", windowEnd);    // race starts within 3 days (quali already happening)
 
   if (!races?.length) {
     console.log("OpenF1 sync: no races in window");
     return;
   }
 
-  console.log(`OpenF1 sync: processing ${races.length} race(s)`);
+  console.log(`OpenF1 sync: processing ${races.length} race(s) in window`);
+
+  // Build a name→driver_number lookup from our drivers table.
+  // Needed to map Jolpi driverId ("russell") to OpenF1 driver_number ("63").
+  const { data: dbDrivers } = await supabaseAdmin.from("drivers").select("id,name");
+  const jolpiIdToDriverNum = new Map<string, string>();
+  for (const d of dbDrivers ?? []) {
+    // "George Russell" → last name "russell"
+    const lastName = d.name.split(" ").pop()?.toLowerCase() ?? "";
+    jolpiIdToDriverNum.set(lastName, d.id);
+    // "Max Verstappen" → full name as key too, for compound names
+    jolpiIdToDriverNum.set(d.name.toLowerCase().replace(/\s+/g, "_"), d.id);
+  }
 
   for (const race of races) {
     const year = new Date(race.race_start).getUTCFullYear();
-    const eventsToSync: EventType[] = ["quali", "race"];
-    if (race.has_sprint) eventsToSync.push("sprint");
 
-    // Fetch all event types in parallel — 3 API calls at once instead of sequential
+    // Only attempt to sync events whose session time has actually passed.
+    // Prevents fetching quali results before qualifying even starts.
+    const eventsToSync: { eventType: EventType; sessionStart: string }[] = [];
+    if (race.quali_start && new Date(race.quali_start) <= new Date()) {
+      eventsToSync.push({ eventType: "quali", sessionStart: race.quali_start });
+    }
+    if (race.has_sprint) {
+      // Sprint start: approximate as quali_start - 4h (we store quali_start only).
+      // Safer: just always attempt if quali has passed — OpenF1 returns empty if not done yet.
+      eventsToSync.push({ eventType: "sprint", sessionStart: race.quali_start });
+    }
+    if (new Date(race.race_start) <= new Date()) {
+      eventsToSync.push({ eventType: "race", sessionStart: race.race_start });
+    }
+
+    if (!eventsToSync.length) {
+      console.log(`[${race.id}] No sessions have started yet — skipping`);
+      continue;
+    }
+
+    // Fetch all eligible events in parallel
     await Promise.allSettled(
-      eventsToSync.map(async (eventType) => {
+      eventsToSync.map(async ({ eventType }) => {
         let rows: { driver_number: string; position: number }[] = [];
 
-        // Try OpenF1 first
+        // ── OpenF1 (primary) ──────────────────────────────
         try {
           rows = await fetchSessionResults(Number(race.id), eventType);
-          if (rows.length) console.log(`[${race.id}/${eventType}] OpenF1 returned ${rows.length} results`);
+          if (rows.length) console.log(`[${race.id}/${eventType}] OpenF1: ${rows.length} results`);
         } catch (e) {
-          console.warn(`[${race.id}/${eventType}] OpenF1 fetch failed:`, e);
+          console.warn(`[${race.id}/${eventType}] OpenF1 failed:`, e);
         }
 
-        // Jolpi fallback — if OpenF1 has no results yet, try Jolpi bulk data
+        // ── Jolpi (fallback if OpenF1 empty) ─────────────
         if (!rows.length) {
           try {
             const round = await findJolpiRoundByDate(year, race.race_start);
             if (round) {
-              const bulkFetch = eventType === "quali"
+              const bulkFn = eventType === "quali"
                 ? fetchAllJolpiQualiResults
                 : eventType === "sprint"
                 ? fetchAllJolpiSprintResults
                 : fetchAllJolpiRaceResults;
-              const allResults = await bulkFetch(year);
+
+              const allResults = await bulkFn(year);
               const jolpiRows = allResults.get(round) ?? [];
+
               if (jolpiRows.length) {
-                rows = jolpiRows.map(r => ({ driver_number: r.driverId, position: r.position }));
-                console.log(`[${race.id}/${eventType}] Jolpi fallback returned ${rows.length} results`);
+                // Map Jolpi driverId → OpenF1 driver_number using name lookup
+                rows = jolpiRows
+                  .map(r => {
+                    const lastName = r.driverId.split("_").pop() ?? r.driverId;
+                    const driverNum = jolpiIdToDriverNum.get(lastName.toLowerCase())
+                      ?? jolpiIdToDriverNum.get(r.driverId.toLowerCase());
+                    if (!driverNum) {
+                      console.warn(`[${race.id}/${eventType}] No driver_number mapping for Jolpi driverId: ${r.driverId}`);
+                      return null;
+                    }
+                    return { driver_number: driverNum, position: r.position };
+                  })
+                  .filter((r): r is { driver_number: string; position: number } => r !== null);
+
+                if (rows.length) console.log(`[${race.id}/${eventType}] Jolpi fallback: ${rows.length} results`);
               }
             }
           } catch (e) {
@@ -124,11 +173,11 @@ async function syncResultsOpenF1() {
         }
 
         if (!rows.length) {
-          console.log(`[${race.id}/${eventType}] No results from either API yet`);
+          console.log(`[${race.id}/${eventType}] No results available from either API yet`);
           return;
         }
 
-        // Batch upsert with onConflict — safe to re-run multiple times
+        // Batch upsert — onConflict makes re-runs idempotent
         const upsertRows = rows
           .filter(r => r.position >= 1 && r.position <= 22)
           .map(r => ({
@@ -145,7 +194,7 @@ async function syncResultsOpenF1() {
           .upsert(upsertRows, { onConflict: "race_id,event_type,driver_id" });
 
         if (error) {
-          console.error(`[${race.id}/${eventType}] DB upsert failed:`, error.message);
+          console.error(`[${race.id}/${eventType}] Upsert failed: ${error.message}`);
         } else {
           console.log(`[${race.id}/${eventType}] Saved ${upsertRows.length} results ✓`);
         }
