@@ -22,6 +22,7 @@ async function syncCalendarOpenF1(year: number) {
   const drivers = allDrivers.filter(d => d.full_name && String(d.full_name).trim() !== "");
 
   for (const d of drivers) {
+    if (!d.full_name || String(d.full_name).trim() === "") continue; // never overwrite with empty name
     await supabaseAdmin.from("drivers").upsert({
       id: String(d.driver_number),
       name: d.full_name,

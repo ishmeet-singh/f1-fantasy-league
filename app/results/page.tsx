@@ -5,13 +5,6 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 export const dynamic = "force-dynamic";
 
 type TabId = "quali" | "sprint" | "race";
-type DriverRef = { name: string; team: string } | { name: string; team: string }[] | null;
-
-function resolveDriver(ref: DriverRef): { name: string; team: string } {
-  if (!ref) return { name: "Unknown", team: "" };
-  const d = Array.isArray(ref) ? ref[0] : ref;
-  return { name: d?.name ?? "Unknown", team: d?.team ?? "" };
-}
 
 export default async function ResultsPage({
   searchParams
@@ -59,20 +52,26 @@ export default async function ResultsPage({
     { data: resultRows },
     { data: allPickRows },
     { data: allUsers },
-    { data: allScoreRows }
+    { data: allScoreRows },
+    { data: allDrivers }
   ] = await Promise.all([
     admin.from("results")
-      .select("event_type,actual_position,driver_id,drivers(name,team)")
+      .select("event_type,actual_position,driver_id")
       .eq("race_id", selectedRace.id)
       .order("actual_position"),
     admin.from("predictions")
-      .select("user_id,driver_id,predicted_position,event_type,drivers(name)")
+      .select("user_id,driver_id,predicted_position,event_type")
       .eq("race_id", selectedRace.id),
     admin.from("users").select("id,display_name,email").order("created_at"),
     admin.from("scores")
       .select("user_id,event_type,points,exact_matches")
       .eq("race_id", selectedRace.id),
+    // Fetch ALL drivers separately — avoids broken FK joins when names are missing
+    admin.from("drivers").select("id,name,team"),
   ]);
+
+  // Build guaranteed driver lookup from full drivers table
+  const driverMap = new Map((allDrivers ?? []).map(d => [d.id, d]));
 
   // My picks: eventType -> driverId -> predictedPosition
   const myPickRows = user ? (allPickRows ?? []).filter(p => p.user_id === user.id) : [];
@@ -90,15 +89,20 @@ export default async function ResultsPage({
     if (et in myScores) myScores[et] = { points: s.points, exact: s.exact_matches ?? 0 };
   }
 
-  // Results: eventType -> rows
+  // Results: eventType -> rows — use driverMap for reliable names
   const resultsByEvent: Record<TabId, { driver_id: string; actual_position: number; driver_name: string; driver_team: string }[]> = {
     quali: [], sprint: [], race: []
   };
   for (const r of resultRows ?? []) {
     const et = r.event_type as TabId;
     if (!(et in resultsByEvent)) continue;
-    const { name, team } = resolveDriver(r.drivers as DriverRef);
-    resultsByEvent[et].push({ driver_id: String(r.driver_id), actual_position: r.actual_position, driver_name: name, driver_team: team });
+    const driver = driverMap.get(String(r.driver_id));
+    resultsByEvent[et].push({
+      driver_id: String(r.driver_id),
+      actual_position: r.actual_position,
+      driver_name: driver?.name || `#${r.driver_id}`,
+      driver_team: driver?.team || ""
+    });
   }
 
   // League picks: userId -> eventType -> picks[]
@@ -116,8 +120,8 @@ export default async function ResultsPage({
       userId: u.id,
       userName: u.display_name || u.email.split("@")[0],
       picks: userPicks.map(p => {
-        const dn = Array.isArray(p.drivers) ? p.drivers[0]?.name : (p.drivers as { name: string } | null)?.name;
-        const driverName = dn && dn !== p.driver_id ? dn : `#${p.driver_id}`;
+          const driver = driverMap.get(p.driver_id);
+        const driverName = driver?.name || `#${p.driver_id}`;
         return { predictedPos: p.predicted_position, driverId: p.driver_id, driverName, eventType: p.event_type as TabId };
       }),
       scores: scoresByEt
