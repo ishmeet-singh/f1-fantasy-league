@@ -45,13 +45,14 @@ function ptsForDiff(et: TabId, diff: number): number {
 
 // Session card: shows my picks vs actual results for one event
 function SessionCard({
-  eventType, label, results, myPicks, myScore, sessionLocked
+  eventType, label, results, myPicks, myScore, sessionLocked, driverNames
 }: {
   eventType: TabId; label: string;
   results: ResultRow[];
   myPicks: Record<string, number>;
   myScore: { points: number; exact: number } | null;
   sessionLocked: boolean;
+  driverNames: Map<string, { name: string; team: string }>;
 }) {
   const [showFull, setShowFull] = useState(false);
 
@@ -59,13 +60,18 @@ function SessionCard({
   const actualDriver = new Map(results.map(r => [r.driver_id, r]));
 
   // My picks as rows
+  // Name lookup priority: 1) full driverNames map (all drivers in DB)
+  // 2) actualDriver (only result drivers) 3) raw ID as last resort
   const myPickRows = Object.entries(myPicks)
     .map(([driverId, predictedPos]) => {
       const actual = actualPos.get(driverId) ?? null;
       const diff = actual !== null ? Math.abs(predictedPos - actual) : null;
       const pts = diff !== null ? ptsForDiff(eventType, diff) : null;
-      const driver = actualDriver.get(driverId);
-      return { driverId, predictedPos, actual, diff, pts, driverName: driver?.driver_name ?? driverId, driverTeam: driver?.driver_team ?? "" };
+      const fromMap = driverNames.get(driverId);
+      const fromResults = actualDriver.get(driverId);
+      const driverName = fromMap?.name || fromResults?.driver_name || `#${driverId}`;
+      const driverTeam = fromMap?.team || fromResults?.driver_team || "";
+      return { driverId, predictedPos, actual, diff, pts, driverName, driverTeam };
     })
     .sort((a, b) => a.predictedPos - b.predictedPos);
 
@@ -324,6 +330,26 @@ export function RaceWeekendResults({
     race: new Date(selectedRace.race_start) <= now || resultsByEvent.race.length > 0,
   };
 
+  // Build driver name map from ALL sources:
+  // 1. Results (have team colors)
+  // 2. League players picks (have names even for DNS/DNQ drivers not in results)
+  const driverNames = new Map<string, { name: string; team: string }>();
+  for (const et of ["quali", "sprint", "race"] as TabId[]) {
+    for (const r of resultsByEvent[et]) {
+      if (r.driver_name && r.driver_name !== r.driver_id) {
+        driverNames.set(r.driver_id, { name: r.driver_name, team: r.driver_team });
+      }
+    }
+  }
+  // Fill in from league picks — covers DNS/DNQ/not-classified drivers
+  for (const player of leaguePlayers) {
+    for (const pick of player.picks) {
+      if (!driverNames.has(pick.driverId) && pick.driverName && pick.driverName !== pick.driverId && !pick.driverName.startsWith("#")) {
+        driverNames.set(pick.driverId, { name: pick.driverName, team: "" });
+      }
+    }
+  }
+
   const weekendTotal = (["quali", "sprint", "race"] as TabId[])
     .reduce((s, et) => s + (myScores[et]?.points ?? 0), 0);
   const weekendExact = (["quali", "sprint", "race"] as TabId[])
@@ -380,6 +406,7 @@ export function RaceWeekendResults({
           myPicks={myPicks.quali}
           myScore={myScores.quali}
           sessionLocked={sessionLocked.quali}
+          driverNames={driverNames}
         />
         {selectedRace.has_sprint && (
           <SessionCard
@@ -388,6 +415,7 @@ export function RaceWeekendResults({
             myPicks={myPicks.sprint}
             myScore={myScores.sprint}
             sessionLocked={sessionLocked.sprint}
+            driverNames={driverNames}
           />
         )}
         <SessionCard
@@ -396,6 +424,7 @@ export function RaceWeekendResults({
           myPicks={myPicks.race}
           myScore={myScores.race}
           sessionLocked={sessionLocked.race}
+          driverNames={driverNames}
         />
       </div>
 
