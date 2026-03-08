@@ -162,6 +162,24 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
     }
   }
 
+  async function fixDriverNames() {
+    setSyncLoading("fix-drivers");
+    setSyncStatus("");
+    setSyncError("");
+    const res = await fetch("/api/admin/fix-driver-names", { method: "POST" });
+    const json = await res.json();
+    setSyncLoading(null);
+    if (res.ok) {
+      if (json.fixed > 0) {
+        setSyncStatus(`Fixed ${json.fixed} driver(s): ${json.results.map((r: {driver_id: string; new_name: string}) => `${r.driver_id}→${r.new_name}`).join(", ")}`);
+      } else {
+        setSyncStatus(json.message || "All driver names already correct");
+      }
+    } else {
+      setSyncError(json.error || "Failed");
+    }
+  }
+
   async function testReminder() {
     setSyncLoading("test-reminder");
     setSyncStatus("");
@@ -327,6 +345,13 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
           Run &quot;Sync Season Calendar&quot; once to populate all races and drivers from OpenF1. After that, results sync automatically.
         </p>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={fixDriverNames}
+            disabled={syncLoading !== null}
+            className="rounded bg-yellow-600 hover:bg-yellow-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+          >
+            {syncLoading === "fix-drivers" ? "Fixing…" : "Fix driver names"}
+          </button>
           <button
             onClick={testReminder}
             disabled={syncLoading !== null}
