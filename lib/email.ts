@@ -36,7 +36,8 @@ export async function sendReminderEmail({
   eventType,
   minutesLeft,
   picksLink,
-  isMagicLink = false
+  isMagicLink = false,
+  appUrl
 }: {
   to: string;
   name: string;
@@ -45,11 +46,13 @@ export async function sendReminderEmail({
   minutesLeft: number;
   picksLink: string;
   isMagicLink?: boolean;
+  appUrl?: string;
 }) {
   const eventLabel = EVENT_LABELS[eventType];
   const timeLabel = formatTimeLabel(minutesLeft);
   const isUrgent = minutesLeft <= 60;
   const fromAddress = process.env.GMAIL_USER!;
+  const baseUrl = appUrl || process.env.NEXT_PUBLIC_APP_URL || "https://f1-fantasy-league-lilac.vercel.app";
 
   const subject = isUrgent
     ? `⏰ Last chance! ${raceName} ${eventLabel} picks lock in ${timeLabel}`
@@ -88,6 +91,10 @@ export async function sendReminderEmail({
       <p style="color:#475569;font-size:12px;margin:20px 0 0;">
         ${linkNote}
       </p>
+      ${isMagicLink ? `
+      <p style="color:#334155;font-size:11px;margin:12px 0 0;">
+        Link not working? <a href="${baseUrl}/picks" style="color:#64748b;text-decoration:underline;">Go to the app directly →</a>
+      </p>` : ""}
     </div>
 
     <p style="color:#334155;font-size:12px;text-align:center;margin-top:24px;">
