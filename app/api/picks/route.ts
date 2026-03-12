@@ -35,8 +35,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No sprint for this race" }, { status: 400 });
   }
 
-  // Enforce 48h window: picks must not be submitted before window opens
-  const windowOpenAt = new Date(new Date(race.quali_start).getTime() - WINDOW_HOURS * 60 * 60 * 1000);
+  // Window opens 48h before the EARLIEST session of the weekend (sprint or qualifying)
+  const firstSessionTime = Math.min(
+    new Date(race.quali_start).getTime(),
+    race.has_sprint && race.sprint_start ? new Date(race.sprint_start).getTime() : Infinity
+  );
+  const windowOpenAt = new Date(firstSessionTime - WINDOW_HOURS * 60 * 60 * 1000);
   if (new Date() < windowOpenAt) {
     return NextResponse.json({ error: "Picks window has not opened yet" }, { status: 400 });
   }

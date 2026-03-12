@@ -12,8 +12,13 @@ export const dynamic = "force-dynamic";
 
 const WINDOW_HOURS = 48;
 
-function picksOpenAt(qualiStart: string): Date {
-  return new Date(new Date(qualiStart).getTime() - WINDOW_HOURS * 60 * 60 * 1000);
+// Window opens 48h before the earliest session of the weekend (sprint comes before quali on sprint weekends)
+function picksOpenAt(race: { quali_start: string; sprint_start?: string | null; has_sprint: boolean }): Date {
+  const firstSessionTime = Math.min(
+    new Date(race.quali_start).getTime(),
+    race.has_sprint && race.sprint_start ? new Date(race.sprint_start).getTime() : Infinity
+  );
+  return new Date(firstSessionTime - WINDOW_HOURS * 60 * 60 * 1000);
 }
 
 function formatCountdown(ms: number): string {
@@ -78,7 +83,7 @@ export default async function PicksPage({
   // Default: soonest upcoming race whose picks window is open (race not finished yet)
   // Races are ordered ascending by race_start, so [0] is always the soonest
   const windowOpenAndUpcoming = races.filter(
-    (r) => now >= picksOpenAt(r.quali_start) && new Date(r.race_start) > now
+    (r) => now >= picksOpenAt(r) && new Date(r.race_start) > now
   );
   const upcomingRaces = races.filter((r) => new Date(r.race_start) > now);
   const defaultRace =
@@ -147,7 +152,7 @@ export default async function PicksPage({
     );
   }
 
-  const openAt = picksOpenAt(race.quali_start);
+  const openAt = picksOpenAt(race);
   const isOpen = now >= openAt;
   const msUntilOpen = openAt.getTime() - now.getTime();
 
@@ -160,7 +165,7 @@ export default async function PicksPage({
     id: r.id,
     grand_prix: r.grand_prix,
     round: i + 1,
-    isWindowOpen: now >= picksOpenAt(r.quali_start),
+    isWindowOpen: now >= picksOpenAt(r),
     isRaceDone: new Date(r.race_start) <= now
   }));
 
@@ -193,7 +198,7 @@ export default async function PicksPage({
       {/* Window not open yet */}
       {!isOpen ? (
         <div className="card space-y-3">
-          <p className="text-slate-400 text-sm">Picks open 48 hours before qualifying.</p>
+          <p className="text-slate-400 text-sm">Picks open 48 hours before the first session.</p>
           <div className="text-sm text-slate-500 space-y-2">
             {[
               { label: "Qualifying", iso: race.quali_start },

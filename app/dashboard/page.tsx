@@ -42,7 +42,13 @@ export default async function DashboardPage() {
   const totalPicksSubmitted = myNextPicks.length;
   const WINDOW_HOURS = 48;
   const picksWindowOpen = nextRace
-    ? new Date() >= new Date(new Date(nextRace.quali_start).getTime() - WINDOW_HOURS * 60 * 60 * 1000)
+    ? (() => {
+        const firstSessionTime = Math.min(
+          new Date(nextRace.quali_start).getTime(),
+          nextRace.has_sprint && nextRace.sprint_start ? new Date(nextRace.sprint_start).getTime() : Infinity
+        );
+        return new Date() >= new Date(firstSessionTime - WINDOW_HOURS * 60 * 60 * 1000);
+      })()
     : false;
 
   return (
