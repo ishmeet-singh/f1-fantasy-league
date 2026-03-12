@@ -67,9 +67,9 @@ function useCountdown(deadline: string, locked: boolean) {
 
 // ── Slot — uses useSortable so items animate out of the way during drag ──────
 function SortableSlot({
-  slotIdx, driver, onRemove
+  id, slotIdx, driver, onRemove
 }: {
-  slotIdx: number; driver: Driver | null; onRemove: () => void;
+  id: string; slotIdx: number; driver: Driver | null; onRemove: () => void;
 }) {
   const isEmpty = !driver;
   const {
@@ -77,7 +77,7 @@ function SortableSlot({
     transform, transition,
     isDragging, isOver,
   } = useSortable({
-    id: `slot-${slotIdx}`,
+    id,
     disabled: isEmpty, // empty slots can receive drops but can't be dragged
   });
 
@@ -223,14 +223,15 @@ export function PicksForm({
     useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 8 } })
   );
 
+  // Stable content-based IDs: driver ID for filled slots, positional placeholder for empty
+  const slotIds = slots.map((driverId, i) => driverId ?? `empty-${i}`);
+
   // Derive what's being dragged for the overlay
-  const activeSlotIdx = activeId?.startsWith("slot-") ? parseInt(activeId.slice(5)) : null;
-  const activeSlotDriver = activeSlotIdx !== null && slots[activeSlotIdx]
-    ? driverById.get(slots[activeSlotIdx]!) ?? null
-    : null;
-  const activePoolDriver = activeId?.startsWith("pool-")
-    ? driverById.get(activeId.slice(5)) ?? null
-    : null;
+  // activeId is a driver ID (slot drag) or "pool-{driverId}" (pool drag)
+  const isPoolDrag = activeId?.startsWith("pool-");
+  const activeSlotDriver = activeId && !isPoolDrag ? driverById.get(activeId) ?? null : null;
+  const activeSlotIdx = activeSlotDriver ? slots.indexOf(activeId!) : null;
+  const activePoolDriver = isPoolDrag ? driverById.get(activeId!.slice(5)) ?? null : null;
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
@@ -243,14 +244,20 @@ export function PicksForm({
     const activeIdStr = String(active.id);
     const overIdStr = String(over.id);
 
-    if (activeIdStr.startsWith("slot-") && overIdStr.startsWith("slot-")) {
-      const from = parseInt(activeIdStr.slice(5));
-      const to = parseInt(overIdStr.slice(5));
-      if (from !== to) setSlots(prev => arrayMove(prev, from, to));
-    } else if (activeIdStr.startsWith("pool-") && overIdStr.startsWith("slot-")) {
+    if (!activeIdStr.startsWith("pool-")) {
+      // Slot reorder: activeIdStr is a driver ID, overIdStr is a driver ID or empty-${i}
+      const from = slotIds.indexOf(activeIdStr);
+      const to = slotIds.indexOf(overIdStr);
+      if (from !== -1 && to !== -1 && from !== to) {
+        setSlots(prev => arrayMove(prev, from, to));
+      }
+    } else {
+      // Pool chip dropped onto a slot
       const driverId = activeIdStr.slice(5);
-      const slotIdx = parseInt(overIdStr.slice(5));
-      setSlots(prev => { const next = [...prev]; next[slotIdx] = driverId; return next; });
+      const to = slotIds.indexOf(overIdStr);
+      if (to !== -1) {
+        setSlots(prev => { const next = [...prev]; next[to] = driverId; return next; });
+      }
     }
   }
 
@@ -329,7 +336,6 @@ export function PicksForm({
   }
 
   // ── Editable view ─────────────────────────────────────────────────────
-  const slotIds = slots.map((_, i) => `slot-${i}`);
 
   return (
     <div className="card space-y-4">
@@ -361,10 +367,12 @@ export function PicksForm({
           <p className="text-xs text-slate-500">{filledCount}/{size} picked · hold ⠿ to reorder</p>
           <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
             {slots.map((driverId, i) => {
+              const id = slotIds[i];
               const driver = driverId ? driverById.get(driverId) ?? null : null;
               return (
                 <SortableSlot
-                  key={`slot-${i}`}
+                  key={id}
+                  id={id}
                   slotIdx={i}
                   driver={driver}
                   onRemove={() => removeFromSlot(i)}
