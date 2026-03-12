@@ -207,13 +207,14 @@ export function PicksForm({
     const overId = String(over.id);
 
     if (activeId.startsWith("slot-") && overId.startsWith("slot-")) {
-      // Reorder: swap two filled slots
+      // Reorder: remove from source, insert at target — everything in between shifts
       const from = parseInt(activeId.slice(5));
       const to = parseInt(overId.slice(5));
       if (from === to) return;
       setSlots(prev => {
         const next = [...prev];
-        [next[from], next[to]] = [next[to], next[from]];
+        const [moved] = next.splice(from, 1);
+        next.splice(to, 0, moved);
         return next;
       });
     } else if (activeId.startsWith("pool-") && overId.startsWith("slot-")) {
