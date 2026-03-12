@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   // Fetch race info
   const { data: race } = await supabase
     .from("race_weekends")
-    .select("id,grand_prix,race_start")
+    .select("id,grand_prix,quali_start,sprint_start,race_start")
     .eq("id", raceId)
     .single();
 
@@ -70,7 +70,11 @@ export async function POST(req: Request) {
         name: user.display_name || user.email.split("@")[0],
         raceName: race.grand_prix,
         eventType,
-        minutesLeft: Math.round((new Date(race.race_start).getTime() - Date.now()) / 60000),
+        minutesLeft: Math.round((new Date(
+          eventType === "quali" ? race.quali_start
+          : eventType === "sprint" ? (race.sprint_start ?? race.race_start)
+          : race.race_start
+        ).getTime() - Date.now()) / 60000),
         picksLink,
         isMagicLink
       });
