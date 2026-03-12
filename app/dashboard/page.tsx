@@ -115,12 +115,14 @@ export default async function DashboardPage() {
               </div>
               {(() => {
                 const now = new Date();
-                if (new Date(nextRace.quali_start) > now)
-                  return <Countdown target={nextRace.quali_start} label="Qualifying in" />;
-                if (nextRace.has_sprint && nextRace.sprint_start && new Date(nextRace.sprint_start) > now)
-                  return <Countdown target={nextRace.sprint_start} label="Sprint in" />;
-                if (new Date(nextRace.race_start) > now)
-                  return <Countdown target={nextRace.race_start} label="Race in" />;
+                const upcoming = [
+                  { label: "Qualifying", iso: nextRace.quali_start },
+                  ...(nextRace.has_sprint && nextRace.sprint_start ? [{ label: "Sprint", iso: nextRace.sprint_start }] : []),
+                  { label: "Race", iso: nextRace.race_start }
+                ]
+                  .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
+                  .find(s => new Date(s.iso) > now);
+                if (upcoming) return <Countdown target={upcoming.iso} label={`${upcoming.label} in`} />;
                 return <Countdown target={nextRace.race_start} label="Race" />;
               })()}
               <div className="text-xs text-slate-600 space-y-1 border-t border-slate-800 pt-2">
@@ -128,12 +130,14 @@ export default async function DashboardPage() {
                   { label: "Qualifying", iso: nextRace.quali_start },
                   ...(nextRace.has_sprint && nextRace.sprint_start ? [{ label: "Sprint", iso: nextRace.sprint_start }] : []),
                   { label: "Race", iso: nextRace.race_start }
-                ].map(({ label, iso }) => (
-                  <div key={label} className="flex justify-between gap-2">
-                    <span>{label}</span>
-                    <span className="text-slate-400 text-right"><LocalTime iso={iso} opts={SESSION_OPTS} /></span>
-                  </div>
-                ))}
+                ]
+                  .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
+                  .map(({ label, iso }) => (
+                    <div key={label} className="flex justify-between gap-2">
+                      <span>{label}</span>
+                      <span className="text-slate-400 text-right"><LocalTime iso={iso} opts={SESSION_OPTS} /></span>
+                    </div>
+                  ))}
               </div>
 
               {/* Picks reminder */}
