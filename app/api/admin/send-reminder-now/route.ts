@@ -45,24 +45,33 @@ export async function POST(req: Request) {
   const submittedIds = new Set((submitted || []).map(r => r.user_id));
   const targets = allUsers.filter(u => !submittedIds.has(u.id));
 
+  const sessionStart = eventType === "quali" ? race.quali_start
+    : eventType === "sprint" ? (race.sprint_start ?? race.race_start)
+    : race.race_start;
+  const minutesLeft = Math.round((new Date(sessionStart).getTime() - Date.now()) / 60000);
+  // Only use magic links when the session is ≤60 min away — Supabase OTP expiry is ~1h.
+  // For longer-horizon reminders use a plain /picks URL (users already logged in go straight there).
+  const usesMagicLink = minutesLeft <= 60;
+
   let sent = 0, skipped = 0;
 
   for (const user of targets) {
     try {
-      // Try to generate a magic link; fall back to plain app URL if it fails.
-      // Magic links expire after ~1 h so they're only reliable for imminent sessions.
       let picksLink = `${appUrl}/picks`;
       let isMagicLink = false;
-      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-        type: "magiclink",
-        email: user.email,
-        options: { redirectTo: `${appUrl}/auth/callback?next=/picks` }
-      });
-      if (linkError || !linkData?.properties?.action_link) {
-        console.warn(`Link gen failed for ${user.email}, using plain URL:`, linkError);
-      } else {
-        picksLink = linkData.properties.action_link;
-        isMagicLink = true;
+
+      if (usesMagicLink) {
+        const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+          type: "magiclink",
+          email: user.email,
+          options: { redirectTo: `${appUrl}/auth/callback?next=/picks` }
+        });
+        if (linkError || !linkData?.properties?.action_link) {
+          console.warn(`Link gen failed for ${user.email}, using plain URL:`, linkError);
+        } else {
+          picksLink = linkData.properties.action_link;
+          isMagicLink = true;
+        }
       }
 
       await sendReminderEmail({
@@ -70,11 +79,7 @@ export async function POST(req: Request) {
         name: user.display_name || user.email.split("@")[0],
         raceName: race.grand_prix,
         eventType,
-        minutesLeft: Math.round((new Date(
-          eventType === "quali" ? race.quali_start
-          : eventType === "sprint" ? (race.sprint_start ?? race.race_start)
-          : race.race_start
-        ).getTime() - Date.now()) / 60000),
+        minutesLeft,
         picksLink,
         isMagicLink
       });
