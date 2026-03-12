@@ -82,7 +82,7 @@ async function syncResultsOpenF1() {
 
   const { data: races } = await supabaseAdmin
     .from("race_weekends")
-    .select("id,has_sprint,race_start,quali_start")
+    .select("id,has_sprint,race_start,quali_start,sprint_start")
     .not("id", "like", "jolpi-%")
     .gte("race_start", windowStart)   // not older than 7 days
     .lte("race_start", windowEnd);    // race starts within 3 days (quali already happening)
@@ -115,10 +115,8 @@ async function syncResultsOpenF1() {
     if (race.quali_start && new Date(race.quali_start) <= new Date()) {
       eventsToSync.push({ eventType: "quali", sessionStart: race.quali_start });
     }
-    if (race.has_sprint) {
-      // Sprint start: approximate as quali_start - 4h (we store quali_start only).
-      // Safer: just always attempt if quali has passed — OpenF1 returns empty if not done yet.
-      eventsToSync.push({ eventType: "sprint", sessionStart: race.quali_start });
+    if (race.has_sprint && race.sprint_start && new Date(race.sprint_start) <= new Date()) {
+      eventsToSync.push({ eventType: "sprint", sessionStart: race.sprint_start });
     }
     if (new Date(race.race_start) <= new Date()) {
       eventsToSync.push({ eventType: "race", sessionStart: race.race_start });
