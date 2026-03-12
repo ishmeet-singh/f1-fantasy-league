@@ -392,7 +392,7 @@ export function PicksForm({
         </div>
 
         {/* Drag overlay — follows the cursor while dragging */}
-        <DragOverlay dropAnimation={{ duration: 150, easing: "ease" }}>
+        <DragOverlay dropAnimation={null}>
           {activeSlotDriver && activeSlotIdx !== null && (
             <SlotOverlayCard slotIdx={activeSlotIdx} driver={activeSlotDriver} />
           )}
