@@ -13,21 +13,21 @@ export async function POST() {
 
   const checks: Record<string, string> = {};
 
-  // Check 1: RESEND_API_KEY
-  checks.RESEND_API_KEY = process.env.RESEND_API_KEY
-    ? `set (starts with ${process.env.RESEND_API_KEY.slice(0, 6)}...)`
+  // Check 1: GMAIL_USER
+  checks.GMAIL_USER = process.env.GMAIL_USER
+    ? `set (${process.env.GMAIL_USER})`
     : "MISSING ❌";
 
-  // Check 2: EMAIL_FROM
-  checks.EMAIL_FROM = process.env.EMAIL_FROM || "not set (using fallback noreply@resend.dev)";
+  // Check 2: GMAIL_APP_PASSWORD
+  checks.GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD ? "set ✓" : "MISSING ❌";
 
   // Check 3: NEXT_PUBLIC_APP_URL
   checks.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || "not set (using hardcoded fallback)";
 
-  if (!process.env.RESEND_API_KEY) {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
     return NextResponse.json({
       ok: false,
-      error: "RESEND_API_KEY is not set in Vercel environment variables",
+      error: "GMAIL_USER or GMAIL_APP_PASSWORD is not set in Vercel environment variables",
       checks
     }, { status: 400 });
   }
@@ -35,7 +35,9 @@ export async function POST() {
   const supabase = getSupabaseAdmin();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://f1-fantasy-league-lilac.vercel.app";
 
-  // Generate a real magic link for the admin
+  // Generate a magic link for the admin (test email is always urgent / <=60min)
+  let picksLink = `${appUrl}/picks`;
+  let isMagicLink = false;
   const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
     type: "magiclink",
     email: adminUser.email!,
@@ -43,14 +45,12 @@ export async function POST() {
   });
 
   if (linkError || !linkData?.properties?.action_link) {
-    return NextResponse.json({
-      ok: false,
-      error: `Magic link generation failed: ${linkError?.message}`,
-      checks
-    }, { status: 500 });
+    checks.magicLinkGenerated = `failed: ${linkError?.message ?? "no action_link"}`;
+  } else {
+    picksLink = linkData.properties.action_link;
+    isMagicLink = true;
+    checks.magicLinkGenerated = "✓ success";
   }
-
-  checks.magicLinkGenerated = "✓ success";
 
   // Try sending the email
   try {
@@ -60,7 +60,8 @@ export async function POST() {
       raceName: "Australian Grand Prix (test)",
       eventType: "race",
       minutesLeft: 60,
-      magicLink: linkData.properties.action_link
+      picksLink,
+      isMagicLink
     });
 
     return NextResponse.json({
