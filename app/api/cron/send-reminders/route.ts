@@ -103,19 +103,26 @@ export async function GET(request: Request) {
 
         for (const user of targets) {
           try {
-            // Generate a one-time magic link that signs the user in and lands on /picks
-            const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-              type: "magiclink",
-              email: user.email,
-              options: {
-                redirectTo: `${appUrl}/auth/callback?next=/picks`
+            // For reminders with < 1 h to go, generate a one-time magic link so the user
+            // is signed in automatically on click. For longer-horizon reminders the link
+            // would already have expired (Supabase default OTP expiry = 1 h), so we fall
+            // back to the plain /picks URL instead — users who are already logged in land
+            // straight on the picks page, others are prompted to sign in.
+            let picksLink = `${appUrl}/picks`;
+            if (intervalMins <= 60) {
+              const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+                type: "magiclink",
+                email: user.email,
+                options: {
+                  redirectTo: `${appUrl}/auth/callback?next=/picks`
+                }
+              });
+              if (linkError || !linkData?.properties?.action_link) {
+                console.warn(`Magic link generation failed for ${user.email}, using plain URL:`, linkError);
+                // fall through — picksLink stays as the plain app URL
+              } else {
+                picksLink = linkData.properties.action_link;
               }
-            });
-
-            if (linkError || !linkData?.properties?.action_link) {
-              console.error(`Failed to generate link for ${user.email}:`, linkError);
-              skipped++;
-              continue;
             }
 
             await sendReminderEmail({
@@ -124,7 +131,8 @@ export async function GET(request: Request) {
               raceName: race.grand_prix,
               eventType,
               minutesLeft: intervalMins,
-              magicLink: linkData.properties.action_link
+              picksLink,
+              isMagicLink: intervalMins <= 60
             });
 
             await supabase.from("notification_log").insert({

@@ -49,16 +49,20 @@ export async function POST(req: Request) {
 
   for (const user of targets) {
     try {
+      // Try to generate a magic link; fall back to plain app URL if it fails.
+      // Magic links expire after ~1 h so they're only reliable for imminent sessions.
+      let picksLink = `${appUrl}/picks`;
+      let isMagicLink = false;
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
         type: "magiclink",
         email: user.email,
         options: { redirectTo: `${appUrl}/auth/callback?next=/picks` }
       });
-
       if (linkError || !linkData?.properties?.action_link) {
-        console.error(`Link gen failed for ${user.email}:`, linkError);
-        skipped++;
-        continue;
+        console.warn(`Link gen failed for ${user.email}, using plain URL:`, linkError);
+      } else {
+        picksLink = linkData.properties.action_link;
+        isMagicLink = true;
       }
 
       await sendReminderEmail({
@@ -67,7 +71,8 @@ export async function POST(req: Request) {
         raceName: race.grand_prix,
         eventType,
         minutesLeft: Math.round((new Date(race.race_start).getTime() - Date.now()) / 60000),
-        magicLink: linkData.properties.action_link
+        picksLink,
+        isMagicLink
       });
 
       sent++;

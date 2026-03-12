@@ -35,14 +35,16 @@ export async function sendReminderEmail({
   raceName,
   eventType,
   minutesLeft,
-  magicLink
+  picksLink,
+  isMagicLink = false
 }: {
   to: string;
   name: string;
   raceName: string;
   eventType: EventType;
   minutesLeft: number;
-  magicLink: string;
+  picksLink: string;
+  isMagicLink?: boolean;
 }) {
   const eventLabel = EVENT_LABELS[eventType];
   const timeLabel = formatTimeLabel(minutesLeft);
@@ -52,6 +54,10 @@ export async function sendReminderEmail({
   const subject = isUrgent
     ? `⏰ Last chance! ${raceName} ${eventLabel} picks lock in ${timeLabel}`
     : `🏎️ ${raceName} ${eventLabel} predictions — ${timeLabel} to go`;
+
+  const linkNote = isMagicLink
+    ? `This link signs you in automatically — no password needed. It expires after one use.`
+    : `You'll be asked to sign in if you're not already logged in.`;
 
   const html = `
 <!DOCTYPE html>
@@ -73,15 +79,14 @@ export async function sendReminderEmail({
         ${raceName} ${eventLabel} picks lock in <span style="color:#ef4444;">${timeLabel}</span>
       </h2>
       <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;">
-        You haven't submitted your ${eventLabel.toLowerCase()} predictions yet. Click below to sign in and lock in your picks before the deadline.
+        You haven't submitted your ${eventLabel.toLowerCase()} predictions yet. Click below to lock in your picks before the deadline.
       </p>
-      <a href="${magicLink}"
+      <a href="${picksLink}"
         style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">
         Submit my ${eventLabel} picks →
       </a>
       <p style="color:#475569;font-size:12px;margin:20px 0 0;">
-        This link signs you in automatically — no password needed.<br/>
-        It expires after one use.
+        ${linkNote}
       </p>
     </div>
 

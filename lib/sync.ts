@@ -37,7 +37,11 @@ async function syncCalendarOpenF1(year: number) {
   for (const meeting of raceMeetings) {
     const sessions = await fetchSessionsForMeeting(Number(meeting.meeting_key));
     const raceStart = findSessionStart(sessions, ["Race"]) ?? meeting.date_start;
-    const qualiStart = findSessionStart(sessions, ["Qualifying", "Sprint Qualifying", "Sprint Shootout"]) ?? raceStart;
+    // Only use the main "Qualifying" session — never Sprint Qualifying / Sprint Shootout.
+    // For sprint weekends the sprint shootout appears earlier chronologically and would
+    // otherwise be picked up first by Array.find, causing quali reminders to fire at the
+    // wrong time.
+    const qualiStart = findSessionStart(sessions, ["Qualifying"]) ?? raceStart;
     const sprintStart = findSessionStart(sessions, ["Sprint"]);
 
     await supabaseAdmin.from("race_weekends").upsert({
