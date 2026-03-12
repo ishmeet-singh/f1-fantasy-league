@@ -398,34 +398,26 @@ export function RaceWeekendResults({
         )}
       </div>
 
-      {/* Session cards — side by side */}
+      {/* Session cards — sorted by session start time */}
       <div className={`grid gap-4 ${selectedRace.has_sprint ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-        <SessionCard
-          eventType="quali" label="Qualifying"
-          results={resultsByEvent.quali}
-          myPicks={myPicks.quali}
-          myScore={myScores.quali}
-          sessionLocked={sessionLocked.quali}
-          driverNames={driverNames}
-        />
-        {selectedRace.has_sprint && (
-          <SessionCard
-            eventType="sprint" label="Sprint"
-            results={resultsByEvent.sprint}
-            myPicks={myPicks.sprint}
-            myScore={myScores.sprint}
-            sessionLocked={sessionLocked.sprint}
-            driverNames={driverNames}
-          />
-        )}
-        <SessionCard
-          eventType="race" label="Race"
-          results={resultsByEvent.race}
-          myPicks={myPicks.race}
-          myScore={myScores.race}
-          sessionLocked={sessionLocked.race}
-          driverNames={driverNames}
-        />
+        {[
+          { eventType: "quali" as TabId, label: "Qualifying", iso: selectedRace.quali_start, show: true },
+          { eventType: "sprint" as TabId, label: "Sprint", iso: selectedRace.sprint_start ?? "", show: selectedRace.has_sprint && !!selectedRace.sprint_start },
+          { eventType: "race" as TabId, label: "Race", iso: selectedRace.race_start, show: true }
+        ]
+          .filter(s => s.show)
+          .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
+          .map(({ eventType, label }) => (
+            <SessionCard
+              key={eventType}
+              eventType={eventType} label={label}
+              results={resultsByEvent[eventType]}
+              myPicks={myPicks[eventType]}
+              myScore={myScores[eventType]}
+              sessionLocked={sessionLocked[eventType]}
+              driverNames={driverNames}
+            />
+          ))}
       </div>
 
       {/* League table */}

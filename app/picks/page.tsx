@@ -195,76 +195,51 @@ export default async function PicksPage({
         <div className="card space-y-3">
           <p className="text-slate-400 text-sm">Picks open 48 hours before qualifying.</p>
           <div className="text-sm text-slate-500 space-y-2">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Qualifying</span>
-              <span><LocalTime iso={race.quali_start} opts={SESSION_OPTS} /></span>
-            </div>
-            {race.has_sprint && race.sprint_start && (
-              <div className="flex justify-between">
-                <span className="text-slate-400">Sprint</span>
-                <span><LocalTime iso={race.sprint_start} opts={SESSION_OPTS} /></span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span className="text-slate-400">Race</span>
-              <span><LocalTime iso={race.race_start} opts={SESSION_OPTS} /></span>
-            </div>
+            {[
+              { label: "Qualifying", iso: race.quali_start },
+              ...(race.has_sprint && race.sprint_start ? [{ label: "Sprint", iso: race.sprint_start }] : []),
+              { label: "Race", iso: race.race_start }
+            ]
+              .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
+              .map(({ label, iso }) => (
+                <div key={label} className="flex justify-between">
+                  <span className="text-slate-400">{label}</span>
+                  <span><LocalTime iso={iso} opts={SESSION_OPTS} /></span>
+                </div>
+              ))}
           </div>
         </div>
       ) : (
-        /* Picks forms + league picks for locked sessions */
+        /* Picks forms + league picks — sorted by session start time */
         <div className="space-y-4">
-          <PicksForm
-            drivers={drivers || []}
-            raceId={race.id}
-            eventType="quali"
-            size={3}
-            locked={qualiLocked}
-            deadline={race.quali_start}
-            initial={picksForEvent("quali")}
-          />
-          {qualiLocked && (
-            <LeaguePicks
-              players={leaguePicksForEvent("quali")}
-              results={resultsForEvent("quali")}
-            />
-          )}
-
-          {race.has_sprint && race.sprint_start && (
-            <>
-              <PicksForm
-                drivers={drivers || []}
-                raceId={race.id}
-                eventType="sprint"
-                size={10}
-                locked={sprintLocked}
-                deadline={race.sprint_start}
-                initial={picksForEvent("sprint")}
-              />
-              {sprintLocked && (
-                <LeaguePicks
-                  players={leaguePicksForEvent("sprint")}
-                  results={resultsForEvent("sprint")}
+          {[
+            { eventType: "quali" as const, iso: race.quali_start, size: 3, locked: qualiLocked, show: true },
+            { eventType: "sprint" as const, iso: race.sprint_start ?? "", size: 10, locked: sprintLocked, show: race.has_sprint && !!race.sprint_start },
+            { eventType: "race" as const, iso: race.race_start, size: 10, locked: raceLocked, show: true }
+          ]
+            .filter(s => s.show)
+            .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
+            .map(({ eventType, iso, size, locked }) => (
+              <div key={eventType}>
+                <PicksForm
+                  drivers={drivers || []}
+                  raceId={race.id}
+                  eventType={eventType}
+                  size={size}
+                  locked={locked}
+                  deadline={iso}
+                  initial={picksForEvent(eventType)}
                 />
-              )}
-            </>
-          )}
-
-          <PicksForm
-            drivers={drivers || []}
-            raceId={race.id}
-            eventType="race"
-            size={10}
-            locked={raceLocked}
-            deadline={race.race_start}
-            initial={picksForEvent("race")}
-          />
-          {raceLocked && (
-            <LeaguePicks
-              players={leaguePicksForEvent("race")}
-              results={resultsForEvent("race")}
-            />
-          )}
+                {locked && (
+                  <div className="mt-2">
+                    <LeaguePicks
+                      players={leaguePicksForEvent(eventType)}
+                      results={resultsForEvent(eventType)}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
         </div>
       )}
     </div>
