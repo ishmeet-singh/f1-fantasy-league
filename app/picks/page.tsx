@@ -156,6 +156,10 @@ export default async function PicksPage({
   const isOpen = now >= openAt;
   const msUntilOpen = openAt.getTime() - now.getTime();
 
+  // Per-session: window open = 48h before that session's own start time
+  const sessionWindowOpen = (sessionStart: string) =>
+    now >= new Date(new Date(sessionStart).getTime() - WINDOW_HOURS * 60 * 60 * 1000);
+
   // Lock if session time passed OR results already exist for that event
   const qualiLocked = new Date(race.quali_start) <= now || eventsWithResults.has("quali");
   const sprintLocked = race.sprint_start ? (new Date(race.sprint_start) <= now || eventsWithResults.has("sprint")) : true;
@@ -224,27 +228,46 @@ export default async function PicksPage({
           ]
             .filter(s => s.show)
             .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
-            .map(({ eventType, iso, size, locked }) => (
-              <div key={eventType}>
-                <PicksForm
-                  drivers={drivers || []}
-                  raceId={race.id}
-                  eventType={eventType}
-                  size={size}
-                  locked={locked}
-                  deadline={iso}
-                  initial={picksForEvent(eventType)}
-                />
-                {locked && (
-                  <div className="mt-2">
-                    <LeaguePicks
-                      players={leaguePicksForEvent(eventType)}
-                      results={resultsForEvent(eventType)}
-                    />
+            .map(({ eventType, iso, size, locked }) => {
+              const windowOpen = sessionWindowOpen(iso);
+              const label = eventType === "quali" ? "Qualifying" : eventType === "sprint" ? "Sprint" : "Race";
+
+              // Session window not open yet — show a placeholder
+              if (!windowOpen && !locked) {
+                const msLeft = new Date(iso).getTime() - WINDOW_HOURS * 60 * 60 * 1000 - now.getTime();
+                return (
+                  <div key={eventType} className="card space-y-1">
+                    <p className="text-sm font-medium text-slate-300">{label}</p>
+                    <p className="text-xs text-slate-500">
+                      Picks open in <span className="text-white font-semibold">{formatCountdown(msLeft)}</span>
+                      {" · "}<LocalTime iso={iso} opts={SESSION_OPTS} />
+                    </p>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              }
+
+              return (
+                <div key={eventType}>
+                  <PicksForm
+                    drivers={drivers || []}
+                    raceId={race.id}
+                    eventType={eventType}
+                    size={size}
+                    locked={locked}
+                    deadline={iso}
+                    initial={picksForEvent(eventType)}
+                  />
+                  {locked && (
+                    <div className="mt-2">
+                      <LeaguePicks
+                        players={leaguePicksForEvent(eventType)}
+                        results={resultsForEvent(eventType)}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
       )}
     </div>

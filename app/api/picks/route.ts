@@ -35,16 +35,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No sprint for this race" }, { status: 400 });
   }
 
-  // Window opens 48h before the EARLIEST session of the weekend (sprint or qualifying)
-  const firstSessionTime = Math.min(
-    new Date(race.quali_start).getTime(),
-    race.has_sprint && race.sprint_start ? new Date(race.sprint_start).getTime() : Infinity
-  );
-  const windowOpenAt = new Date(firstSessionTime - WINDOW_HOURS * 60 * 60 * 1000);
-  if (new Date() < windowOpenAt) {
-    return NextResponse.json({ error: "Picks window has not opened yet" }, { status: 400 });
-  }
-
+  // Each session has its own 48h window — check the window for this specific session
   const deadline =
     body.eventType === "quali"
       ? race.quali_start
@@ -52,7 +43,16 @@ export async function POST(req: Request) {
         ? race.sprint_start
         : race.race_start;
 
-  if (!deadline || new Date(deadline) <= new Date()) {
+  if (!deadline) {
+    return NextResponse.json({ error: "Session not found" }, { status: 400 });
+  }
+
+  const sessionWindowOpenAt = new Date(new Date(deadline).getTime() - WINDOW_HOURS * 60 * 60 * 1000);
+  if (new Date() < sessionWindowOpenAt) {
+    return NextResponse.json({ error: "Picks window has not opened yet for this session" }, { status: 400 });
+  }
+
+  if (new Date(deadline) <= new Date()) {
     return NextResponse.json({ error: "Locked — session has started" }, { status: 400 });
   }
 
