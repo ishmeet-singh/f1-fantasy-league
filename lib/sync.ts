@@ -131,11 +131,18 @@ async function syncResultsOpenF1() {
     await Promise.allSettled(
       eventsToSync.map(async ({ eventType }) => {
         let rows: { driver_number: string; position: number }[] = [];
+        let openf1Count = 0;
+        let jolpiCount = 0;
+        let source: "openf1" | "jolpi" | "none" = "none";
 
         // ── OpenF1 (primary) ──────────────────────────────
         try {
           rows = await fetchSessionResults(Number(race.id), eventType);
-          if (rows.length) console.log(`[${race.id}/${eventType}] OpenF1: ${rows.length} results`);
+          openf1Count = rows.length;
+          if (rows.length) {
+            source = "openf1";
+            console.log(`[${race.id}/${eventType}] OpenF1: ${rows.length} results`);
+          }
         } catch (e) {
           console.warn(`[${race.id}/${eventType}] OpenF1 failed:`, e);
         }
@@ -155,7 +162,6 @@ async function syncResultsOpenF1() {
               const jolpiRows = allResults.get(round) ?? [];
 
               if (jolpiRows.length) {
-                // Map Jolpi driverId → OpenF1 driver_number using name lookup
                 rows = jolpiRows
                   .map(r => {
                     const lastName = r.driverId.split("_").pop() ?? r.driverId;
@@ -169,7 +175,11 @@ async function syncResultsOpenF1() {
                   })
                   .filter((r): r is { driver_number: string; position: number } => r !== null);
 
-                if (rows.length) console.log(`[${race.id}/${eventType}] Jolpi fallback: ${rows.length} results`);
+                jolpiCount = rows.length;
+                if (rows.length) {
+                  source = "jolpi";
+                  console.log(`[${race.id}/${eventType}] Jolpi fallback: ${rows.length} results`);
+                }
               }
             }
           } catch (e) {
@@ -177,32 +187,43 @@ async function syncResultsOpenF1() {
           }
         }
 
-        if (!rows.length) {
-          console.log(`[${race.id}/${eventType}] No results available from either API yet`);
-          return;
-        }
+        // ── Upsert results ────────────────────────────────
+        let rowsUpserted = 0;
+        if (rows.length) {
+          const upsertRows = rows
+            .filter(r => r.position >= 1 && r.position <= 22)
+            .map(r => ({
+              race_id: race.id,
+              event_type: eventType,
+              driver_id: r.driver_number,
+              actual_position: r.position
+            }));
 
-        // Batch upsert — onConflict makes re-runs idempotent
-        const upsertRows = rows
-          .filter(r => r.position >= 1 && r.position <= 22)
-          .map(r => ({
-            race_id: race.id,
-            event_type: eventType,
-            driver_id: r.driver_number,
-            actual_position: r.position
-          }));
+          if (upsertRows.length) {
+            const { error } = await supabaseAdmin
+              .from("results")
+              .upsert(upsertRows, { onConflict: "race_id,event_type,driver_id" });
 
-        if (!upsertRows.length) return;
-
-        const { error } = await supabaseAdmin
-          .from("results")
-          .upsert(upsertRows, { onConflict: "race_id,event_type,driver_id" });
-
-        if (error) {
-          console.error(`[${race.id}/${eventType}] Upsert failed: ${error.message}`);
+            if (error) {
+              console.error(`[${race.id}/${eventType}] Upsert failed: ${error.message}`);
+            } else {
+              rowsUpserted = upsertRows.length;
+              console.log(`[${race.id}/${eventType}] Saved ${rowsUpserted} results ✓`);
+            }
+          }
         } else {
-          console.log(`[${race.id}/${eventType}] Saved ${upsertRows.length} results ✓`);
+          console.log(`[${race.id}/${eventType}] No results available from either API yet`);
         }
+
+        // ── Log every attempt so we can measure API publish delay ─
+        await supabaseAdmin.from("results_sync_log").insert({
+          race_id: race.id,
+          event_type: eventType,
+          openf1_count: openf1Count,
+          jolpi_count: jolpiCount,
+          rows_upserted: rowsUpserted,
+          source
+        });
       })
     );
   }
