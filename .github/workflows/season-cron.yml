@@ -3,7 +3,7 @@ name: season-cron
 on:
   schedule:
     - cron: "*/15 * * * *"   # every 15 min — reminders
-    - cron: "*/30 * * * *"   # every 30 min — sync results
+    - cron: "*/5 * * * *"    # every 5 min — sync results
     - cron: "15 */6 * * *"   # every 6 hours — sync calendar
     - cron: "45 * * * *"     # hourly — recompute scores
   workflow_dispatch:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send reminder emails (every 15 minutes)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *' || github.event.schedule == '*/30 * * * *' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *' || github.event.schedule == '*/5 * * * *' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \
@@ -22,8 +22,8 @@ jobs:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
-      - name: Call sync-results (every 30 minutes)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/30 * * * *' }}
+      - name: Call sync-results (every 5 minutes)
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \
