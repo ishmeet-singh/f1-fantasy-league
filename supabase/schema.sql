@@ -16,6 +16,7 @@ create table if not exists public.race_weekends (
   grand_prix text not null,
   race_date timestamptz not null,
   quali_start timestamptz not null,
+  sprint_quali_start timestamptz,
   sprint_start timestamptz,
   race_start timestamptz not null,
   has_sprint boolean default false
@@ -25,7 +26,7 @@ create table if not exists public.predictions (
   id bigint generated always as identity primary key,
   user_id uuid not null references public.users(id) on delete cascade,
   race_id text not null references public.race_weekends(id) on delete cascade,
-  event_type text not null check (event_type in ('quali','sprint','race')),
+  event_type text not null check (event_type in ('quali','sprint_quali','sprint','race')),
   driver_id text not null references public.drivers(id),
   predicted_position int not null check (predicted_position >= 1 and predicted_position <= 10),
   created_at timestamptz default now(),
@@ -36,7 +37,7 @@ create table if not exists public.predictions (
 create table if not exists public.results (
   id bigint generated always as identity primary key,
   race_id text not null references public.race_weekends(id) on delete cascade,
-  event_type text not null check (event_type in ('quali','sprint','race')),
+  event_type text not null check (event_type in ('quali','sprint_quali','sprint','race')),
   driver_id text not null references public.drivers(id),
   actual_position int not null check (actual_position >= 1 and actual_position <= 20),
   unique (race_id, event_type, driver_id)
@@ -46,7 +47,7 @@ create table if not exists public.scores (
   id bigint generated always as identity primary key,
   user_id uuid not null references public.users(id) on delete cascade,
   race_id text not null references public.race_weekends(id) on delete cascade,
-  event_type text not null check (event_type in ('quali','sprint','race')),
+  event_type text not null check (event_type in ('quali','sprint_quali','sprint','race')),
   points int not null,
   total_error int default 0,
   exact_matches int default 0,
@@ -96,7 +97,7 @@ create table if not exists public.notification_log (
   id bigint generated always as identity primary key,
   user_id uuid not null references public.users(id) on delete cascade,
   race_id text not null references public.race_weekends(id) on delete cascade,
-  event_type text not null check (event_type in ('quali','sprint','race')),
+  event_type text not null check (event_type in ('quali','sprint_quali','sprint','race')),
   interval_label text not null,
   sent_at timestamptz default now(),
   unique (user_id, race_id, event_type, interval_label)
@@ -109,7 +110,7 @@ alter table public.notification_log enable row level security;
 create table if not exists public.results_sync_log (
   id bigint generated always as identity primary key,
   race_id text not null,
-  event_type text not null check (event_type in ('quali','sprint','race')),
+  event_type text not null check (event_type in ('quali','sprint_quali','sprint','race')),
   attempted_at timestamptz default now(),
   openf1_count int not null default 0,   -- rows returned by OpenF1 (0 = not available yet)
   jolpi_count int not null default 0,    -- rows returned by Jolpi fallback (0 = not available yet)

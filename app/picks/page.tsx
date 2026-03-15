@@ -7,18 +7,25 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { syncCalendar } from "@/lib/sync";
 import { redirect } from "next/navigation";
+import { EventType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const WINDOW_HOURS = 48;
 
-// Window opens 48h before the earliest session of the weekend (sprint comes before quali on sprint weekends)
-function picksOpenAt(race: { quali_start: string; sprint_start?: string | null; has_sprint: boolean }): Date {
-  const firstSessionTime = Math.min(
-    new Date(race.quali_start).getTime(),
-    race.has_sprint && race.sprint_start ? new Date(race.sprint_start).getTime() : Infinity
-  );
-  return new Date(firstSessionTime - WINDOW_HOURS * 60 * 60 * 1000);
+// Window opens 48h before the earliest session of the weekend
+function picksOpenAt(race: {
+  quali_start: string;
+  sprint_quali_start?: string | null;
+  sprint_start?: string | null;
+  has_sprint: boolean;
+}): Date {
+  const times = [new Date(race.quali_start).getTime()];
+  if (race.has_sprint) {
+    if (race.sprint_quali_start) times.push(new Date(race.sprint_quali_start).getTime());
+    if (race.sprint_start) times.push(new Date(race.sprint_start).getTime());
+  }
+  return new Date(Math.min(...times) - WINDOW_HOURS * 60 * 60 * 1000);
 }
 
 function formatCountdown(ms: number): string {
@@ -30,8 +37,6 @@ function formatCountdown(ms: number): string {
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m`;
 }
-
-// Formatting moved client-side via LocalTime to respect browser timezone
 
 export default async function PicksPage({
   searchParams
@@ -81,7 +86,6 @@ export default async function PicksPage({
   }
 
   // Default: soonest upcoming race whose picks window is open (race not finished yet)
-  // Races are ordered ascending by race_start, so [0] is always the soonest
   const windowOpenAndUpcoming = races.filter(
     (r) => now >= picksOpenAt(r) && new Date(r.race_start) > now
   );
@@ -118,7 +122,7 @@ export default async function PicksPage({
 
   // Build league picks per event for locked sessions
   type LeaguePlayer = { userId: string; userName: string; isMe: boolean; picks: { predictedPos: number; driverId: string; driverName: string }[] };
-  function leaguePicksForEvent(eventType: "quali" | "sprint" | "race"): LeaguePlayer[] {
+  function leaguePicksForEvent(eventType: EventType): LeaguePlayer[] {
     return (allUsers ?? []).map((u) => {
       const userPicks = (allPickRows ?? [])
         .filter((p) => p.user_id === u.id && p.event_type === eventType)
@@ -138,13 +142,13 @@ export default async function PicksPage({
   }
 
   // Results lookup for league picks component
-  function resultsForEvent(eventType: "quali" | "sprint" | "race") {
+  function resultsForEvent(eventType: EventType) {
     return (existingResults ?? [])
       .filter((r) => r.event_type === eventType)
       .map((r) => ({ driverId: r.driver_id, actualPos: r.actual_position }));
   }
 
-  function picksForEvent(eventType: "quali" | "sprint" | "race") {
+  function picksForEvent(eventType: EventType) {
     return Object.fromEntries(
       (pickRows || [])
         .filter((p) => p.event_type === eventType)
@@ -162,7 +166,12 @@ export default async function PicksPage({
 
   // Lock if session time passed OR results already exist for that event
   const qualiLocked = new Date(race.quali_start) <= now || eventsWithResults.has("quali");
-  const sprintLocked = race.sprint_start ? (new Date(race.sprint_start) <= now || eventsWithResults.has("sprint")) : true;
+  const sprintQualiLocked = race.sprint_quali_start
+    ? (new Date(race.sprint_quali_start) <= now || eventsWithResults.has("sprint_quali"))
+    : true;
+  const sprintLocked = race.sprint_start
+    ? (new Date(race.sprint_start) <= now || eventsWithResults.has("sprint"))
+    : true;
   const raceLocked = new Date(race.race_start) <= now || eventsWithResults.has("race");
 
   const raceItems = races.map((r, i) => ({
@@ -206,6 +215,7 @@ export default async function PicksPage({
           <div className="text-sm text-slate-500 space-y-2">
             {[
               { label: "Qualifying", iso: race.quali_start },
+              ...(race.has_sprint && race.sprint_quali_start ? [{ label: "Sprint Qualifying", iso: race.sprint_quali_start }] : []),
               ...(race.has_sprint && race.sprint_start ? [{ label: "Sprint", iso: race.sprint_start }] : []),
               { label: "Race", iso: race.race_start }
             ]
@@ -222,15 +232,19 @@ export default async function PicksPage({
         /* Picks forms + league picks — sorted by session start time */
         <div className="space-y-4">
           {[
-            { eventType: "quali" as const, iso: race.quali_start, size: 3, locked: qualiLocked, show: true },
-            { eventType: "sprint" as const, iso: race.sprint_start ?? "", size: 10, locked: sprintLocked, show: race.has_sprint && !!race.sprint_start },
-            { eventType: "race" as const, iso: race.race_start, size: 10, locked: raceLocked, show: true }
+            { eventType: "quali" as EventType, iso: race.quali_start, size: 3, locked: qualiLocked, show: true },
+            { eventType: "sprint_quali" as EventType, iso: race.sprint_quali_start ?? "", size: 3, locked: sprintQualiLocked, show: race.has_sprint && !!race.sprint_quali_start },
+            { eventType: "sprint" as EventType, iso: race.sprint_start ?? "", size: 10, locked: sprintLocked, show: race.has_sprint && !!race.sprint_start },
+            { eventType: "race" as EventType, iso: race.race_start, size: 10, locked: raceLocked, show: true }
           ]
             .filter(s => s.show)
             .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
             .map(({ eventType, iso, size, locked }) => {
               const windowOpen = sessionWindowOpen(iso);
-              const label = eventType === "quali" ? "Qualifying" : eventType === "sprint" ? "Sprint" : "Race";
+              const label =
+                eventType === "quali" ? "Qualifying" :
+                eventType === "sprint_quali" ? "Sprint Qualifying" :
+                eventType === "sprint" ? "Sprint" : "Race";
 
               // Session window not open yet — show a placeholder
               if (!windowOpen && !locked) {
