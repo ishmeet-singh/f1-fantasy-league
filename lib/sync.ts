@@ -8,6 +8,7 @@ import {
   fetchAllJolpiRaceResults,
   fetchAllJolpiQualiResults,
   fetchAllJolpiSprintResults,
+  fetchJolpiRaces,
 } from "@/lib/jolpi";
 
 function findSessionStart(sessions: { session_name: string; date_start: string }[], names: string[]) {
@@ -17,12 +18,17 @@ function findSessionStart(sessions: { session_name: string; date_start: string }
 
 async function syncCalendarOpenF1(year: number) {
   const supabaseAdmin = getSupabaseAdmin();
-  // Fetch drivers from the latest session; filter out any where full_name is missing
-  const [meetings, allDrivers] = await Promise.all([fetchMeetings(year), fetchDrivers()]);
-  const drivers = allDrivers.filter(d => d.full_name && String(d.full_name).trim() !== "");
 
+  // Fetch OpenF1 meetings, Jolpi races, and drivers in parallel
+  const [meetings, allDrivers, jolpiRaces] = await Promise.all([
+    fetchMeetings(year),
+    fetchDrivers(),
+    fetchJolpiRaces(year).catch(() => [] as Awaited<ReturnType<typeof fetchJolpiRaces>>)
+  ]);
+
+  const drivers = allDrivers.filter(d => d.full_name && String(d.full_name).trim() !== "");
   for (const d of drivers) {
-    if (!d.full_name || String(d.full_name).trim() === "") continue; // never overwrite with empty name
+    if (!d.full_name || String(d.full_name).trim() === "") continue;
     await supabaseAdmin.from("drivers").upsert({
       id: String(d.driver_number),
       name: d.full_name,
@@ -34,7 +40,30 @@ async function syncCalendarOpenF1(year: number) {
     (m) => !m.meeting_name.toLowerCase().includes("testing") && !m.meeting_name.toLowerCase().includes("pre-season")
   );
 
+  // Build a set of Jolpi race dates (ms) for cross-checking
+  const jolpiDatesMs = jolpiRaces.map(r => {
+    const t = r.time?.endsWith("Z") ? r.time : (r.time ? r.time + "Z" : "00:00:00Z");
+    return new Date(`${r.date}T${t}`).getTime();
+  });
+
+  const MATCH_TOLERANCE_MS = 3 * 24 * 60 * 60 * 1000; // ±3 days
+
   for (const meeting of raceMeetings) {
+    const meetingDateMs = new Date(meeting.date_start).getTime();
+
+    // Skip races not confirmed by Jolpi — treats Jolpi as the source of truth for
+    // whether a race is actually on the calendar (catches cancellations that OpenF1
+    // is slow to reflect, e.g. Bahrain/Saudi 2026).
+    if (jolpiRaces.length > 0) {
+      const confirmedByJolpi = jolpiDatesMs.some(
+        jolpiMs => Math.abs(jolpiMs - meetingDateMs) <= MATCH_TOLERANCE_MS
+      );
+      if (!confirmedByJolpi) {
+        console.log(`[calendar] Skipping ${meeting.meeting_name} — not in Jolpi calendar (likely cancelled)`);
+        continue;
+      }
+    }
+
     const sessions = await fetchSessionsForMeeting(Number(meeting.meeting_key));
     const raceStart = findSessionStart(sessions, ["Race"]) ?? meeting.date_start;
     // Only use the main "Qualifying" session — never Sprint Qualifying / Sprint Shootout.
