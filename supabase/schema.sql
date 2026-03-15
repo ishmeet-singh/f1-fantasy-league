@@ -114,7 +114,8 @@ create table if not exists public.results_sync_log (
   openf1_count int not null default 0,   -- rows returned by OpenF1 (0 = not available yet)
   jolpi_count int not null default 0,    -- rows returned by Jolpi fallback (0 = not available yet)
   rows_upserted int not null default 0,  -- rows actually saved to results table
-  source text not null default 'none'    -- 'openf1' | 'jolpi' | 'none'
+  source text not null default 'none',   -- 'openf1' | 'jolpi' | 'none'
+  error text                             -- error message if fetch failed
 );
 
 create policy "read all reference" on public.drivers for select using (true);

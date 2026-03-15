@@ -135,6 +135,7 @@ async function syncResultsOpenF1() {
         let openf1Count = 0;
         let jolpiCount = 0;
         let source: "openf1" | "jolpi" | "none" = "none";
+        let errorMsg = "";
 
         // ── OpenF1 (primary) ──────────────────────────────
         try {
@@ -143,8 +144,11 @@ async function syncResultsOpenF1() {
           if (rows.length) {
             source = "openf1";
             console.log(`[${race.id}/${eventType}] OpenF1: ${rows.length} results`);
+          } else {
+            console.log(`[${race.id}/${eventType}] OpenF1: 0 results`);
           }
         } catch (e) {
+          errorMsg = `OpenF1: ${String(e)}`;
           console.warn(`[${race.id}/${eventType}] OpenF1 failed:`, e);
         }
 
@@ -184,6 +188,7 @@ async function syncResultsOpenF1() {
               }
             }
           } catch (e) {
+            errorMsg += ` Jolpi: ${String(e)}`;
             console.warn(`[${race.id}/${eventType}] Jolpi fallback failed:`, e);
           }
         }
@@ -223,7 +228,8 @@ async function syncResultsOpenF1() {
           openf1_count: openf1Count,
           jolpi_count: jolpiCount,
           rows_upserted: rowsUpserted,
-          source
+          source,
+          error: errorMsg || null
         });
       })
     );
