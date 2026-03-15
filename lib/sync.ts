@@ -88,11 +88,12 @@ async function syncResultsOpenF1() {
     .lte("race_start", windowEnd);    // race starts within 3 days (quali already happening)
 
   if (!races?.length) {
-    console.log("OpenF1 sync: no races in window");
+    console.log(`OpenF1 sync: no races in window (windowStart=${windowStart} windowEnd=${windowEnd})`);
     return;
   }
 
-  console.log(`OpenF1 sync: processing ${races.length} race(s) in window`);
+  console.log(`OpenF1 sync: processing ${races.length} race(s) in window (windowStart=${windowStart} windowEnd=${windowEnd})`);
+  console.log(`OpenF1 sync: races found: ${races.map(r => `${r.id}(race_start=${r.race_start})`).join(", ")}`);
 
   // Build a name→driver_number lookup from our drivers table.
   // Needed to map Jolpi driverId ("russell") to OpenF1 driver_number ("63").
