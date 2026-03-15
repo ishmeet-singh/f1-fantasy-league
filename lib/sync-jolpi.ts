@@ -7,7 +7,6 @@ import {
   fetchAllJolpiRaceResults,
   fetchAllJolpiQualiResults,
   fetchAllJolpiSprintResults,
-  findJolpiRoundByDate,
   jolpiRaceId
 } from "@/lib/jolpi";
 
