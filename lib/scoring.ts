@@ -4,7 +4,7 @@ type Config = { max: number; penalty: number; podiumBonus: number; podiumSize: n
 
 const config: Record<EventType, Config> = {
   quali: { max: 12, penalty: 4, podiumBonus: 6, podiumSize: 3 },
-  sprint: { max: 10, penalty: 2, podiumBonus: 10, podiumSize: 3 },
+  sprint: { max: 6, penalty: 1, podiumBonus: 5, podiumSize: 3 },
   race: { max: 12, penalty: 2, podiumBonus: 10, podiumSize: 3 }
 };
 
