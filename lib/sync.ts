@@ -36,8 +36,17 @@ async function syncCalendarOpenF1(year: number) {
     });
   }
 
+  // Races confirmed cancelled that OpenF1/Jolpi are slow to reflect.
+  // Add meeting_key here to permanently exclude from the calendar.
+  const CANCELLED_MEETING_KEYS = new Set([
+    "1282", // Bahrain GP 2026 — cancelled (ongoing conflict)
+    "1283", // Saudi Arabian GP 2026 — cancelled (ongoing conflict)
+  ]);
+
   const raceMeetings = meetings.filter(
-    (m) => !m.meeting_name.toLowerCase().includes("testing") && !m.meeting_name.toLowerCase().includes("pre-season")
+    (m) => !m.meeting_name.toLowerCase().includes("testing")
+        && !m.meeting_name.toLowerCase().includes("pre-season")
+        && !CANCELLED_MEETING_KEYS.has(String(m.meeting_key))
   );
 
   // Build a set of Jolpi race dates (ms) for cross-checking
