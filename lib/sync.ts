@@ -110,21 +110,39 @@ async function syncResultsOpenF1() {
   for (const race of races) {
     const year = new Date(race.race_start).getUTCFullYear();
 
-    // Only attempt to sync events whose session time has actually passed.
-    // Prevents fetching quali results before qualifying even starts.
+    // Check which sessions already have results in the DB — no need to re-fetch those
+    const { data: existingResults } = await supabaseAdmin
+      .from("results")
+      .select("event_type")
+      .eq("race_id", race.id);
+    const alreadySynced = new Set((existingResults ?? []).map(r => r.event_type));
+
+    // Only attempt sessions that: started, have no results yet, and started within 4 hours
+    // (results won't appear more than ~4h after a session — if they're not there by then
+    // the Jolpi fallback will have kicked in anyway)
+    const RESULTS_WINDOW_MS = 4 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+
     const eventsToSync: { eventType: EventType; sessionStart: string }[] = [];
-    if (race.quali_start && new Date(race.quali_start) <= new Date()) {
+    if (race.quali_start && new Date(race.quali_start).getTime() <= nowMs
+        && nowMs - new Date(race.quali_start).getTime() <= RESULTS_WINDOW_MS
+        && !alreadySynced.has("quali")) {
       eventsToSync.push({ eventType: "quali", sessionStart: race.quali_start });
     }
-    if (race.has_sprint && race.sprint_start && new Date(race.sprint_start) <= new Date()) {
+    if (race.has_sprint && race.sprint_start
+        && new Date(race.sprint_start).getTime() <= nowMs
+        && nowMs - new Date(race.sprint_start).getTime() <= RESULTS_WINDOW_MS
+        && !alreadySynced.has("sprint")) {
       eventsToSync.push({ eventType: "sprint", sessionStart: race.sprint_start });
     }
-    if (new Date(race.race_start) <= new Date()) {
+    if (new Date(race.race_start).getTime() <= nowMs
+        && nowMs - new Date(race.race_start).getTime() <= RESULTS_WINDOW_MS
+        && !alreadySynced.has("race")) {
       eventsToSync.push({ eventType: "race", sessionStart: race.race_start });
     }
 
     if (!eventsToSync.length) {
-      console.log(`[${race.id}] No sessions have started yet — skipping`);
+      console.log(`[${race.id}] All sessions already synced — skipping`);
       continue;
     }
 
