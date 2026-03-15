@@ -30,7 +30,7 @@ export default async function RulesPage() {
           <li className="flex gap-3">
             <span className="text-red-400 mt-0.5 shrink-0">▸</span>
             <span>
-              The picks window opens <strong className="text-white">48 hours before Qualifying</strong> for each race weekend.
+              The picks window opens <strong className="text-white">48 hours before the first session</strong> of each race weekend (Sprint on sprint weekends, Qualifying otherwise).
             </span>
           </li>
           <li className="flex gap-3">
@@ -107,16 +107,17 @@ export default async function RulesPage() {
           <ScoringTable
             event="Sprint"
             icon="⚡"
-            basePoints={10}
-            penaltyPerPlace={2}
-            podiumBonus={10}
+            basePoints={6}
+            penaltyPerPlace={1}
+            podiumBonus={5}
             rows={[
-              { label: "Exact (off by 0)", points: 10 },
-              { label: "Off by 1 place", points: 8 },
-              { label: "Off by 2 places", points: 6 },
-              { label: "Off by 3 places", points: 4 },
+              { label: "Exact (off by 0)", points: 6 },
+              { label: "Off by 1 place", points: 5 },
+              { label: "Off by 2 places", points: 4 },
+              { label: "Off by 3 places", points: 3 },
               { label: "Off by 4 places", points: 2 },
-              { label: "Off by 5+ places", points: 0 }
+              { label: "Off by 5 places", points: 1 },
+              { label: "Off by 6+ places", points: 0 }
             ]}
           />
 
@@ -152,7 +153,7 @@ export default async function RulesPage() {
             </li>
             <li className="flex justify-between border-b border-slate-800/60 py-1">
               <span>Sprint perfect podium</span>
-              <span className="font-bold text-yellow-300">+10 pts</span>
+              <span className="font-bold text-yellow-300">+5 pts</span>
             </li>
             <li className="flex justify-between py-1">
               <span>Race perfect podium</span>
@@ -207,9 +208,9 @@ export default async function RulesPage() {
               </tr>
               <tr className="border-t border-slate-800 bg-slate-800/20">
                 <td className="px-4 py-2.5">⚡ Sprint (10 picks)</td>
-                <td className="px-4 py-2.5 text-right">100</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400">+10</td>
-                <td className="px-4 py-2.5 text-right font-bold text-white">110</td>
+                <td className="px-4 py-2.5 text-right">60</td>
+                <td className="px-4 py-2.5 text-right text-yellow-400">+5</td>
+                <td className="px-4 py-2.5 text-right font-bold text-white">65</td>
               </tr>
               <tr className="border-t border-slate-800">
                 <td className="px-4 py-2.5">🏆 Race (10 picks)</td>
@@ -219,9 +220,9 @@ export default async function RulesPage() {
               </tr>
               <tr className="border-t-2 border-slate-700 bg-slate-800/40">
                 <td className="px-4 py-2.5 font-semibold text-white">Sprint weekend total</td>
-                <td className="px-4 py-2.5 text-right">256</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400">+26</td>
-                <td className="px-4 py-2.5 text-right font-bold text-red-400">282</td>
+                <td className="px-4 py-2.5 text-right">216</td>
+                <td className="px-4 py-2.5 text-right text-yellow-400">+21</td>
+                <td className="px-4 py-2.5 text-right font-bold text-red-400">237</td>
               </tr>
               <tr className="border-t border-slate-700 bg-slate-800/40">
                 <td className="px-4 py-2.5 font-semibold text-white">Normal weekend total</td>
