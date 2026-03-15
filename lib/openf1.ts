@@ -28,8 +28,13 @@ type OpenF1Classification = {
   position?: number | string | null;
 };
 
-async function fetchJson<T>(path: string): Promise<T> {
+async function fetchJson<T>(path: string, retries = 1): Promise<T> {
   const res = await fetch(`${getOpenF1BaseUrl()}${path}`, { next: { revalidate: 0 } });
+  if (res.status === 429 && retries > 0) {
+    // Rate limited — wait 10s and retry once
+    await new Promise(r => setTimeout(r, 10000));
+    return fetchJson<T>(path, retries - 1);
+  }
   if (!res.ok) {
     throw new Error(`OpenF1 fetch failed: ${res.status}`);
   }
