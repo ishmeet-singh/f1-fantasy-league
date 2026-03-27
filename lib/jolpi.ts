@@ -1,4 +1,4 @@
-const BASE = "https://api.jolpi.ca/ergast/f1";
+const BASE = "https://api.jolpi.ca/ergast";
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { next: { revalidate: 0 } });
@@ -79,7 +79,7 @@ export type F1DriverStanding = {
 
 export async function fetchF1DriverStandings(year: number): Promise<F1DriverStanding[]> {
   try {
-    const data = await fetchJson<JolpiStandingsResponse>(`/${year}/driverstandings/?limit=30`);
+    const data = await fetchJson<JolpiStandingsResponse>(`/f1/${year}/driverstandings/?limit=30`);
     const list = data.MRData.StandingsTable.StandingsLists?.[0]?.DriverStandings ?? [];
     return list as unknown as F1DriverStanding[];
   } catch {

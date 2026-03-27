@@ -31,8 +31,8 @@ type OpenF1Classification = {
 async function fetchJson<T>(path: string, retries = 1): Promise<T> {
   const res = await fetch(`${getOpenF1BaseUrl()}${path}`, { next: { revalidate: 0 } });
   if (res.status === 429 && retries > 0) {
-    // Rate limited — wait 10s and retry once
-    await new Promise(r => setTimeout(r, 10000));
+    // Rate limited — wait 2s and retry once (keep well within Vercel's 10s function limit)
+    await new Promise(r => setTimeout(r, 2000));
     return fetchJson<T>(path, retries - 1);
   }
   if (!res.ok) {
