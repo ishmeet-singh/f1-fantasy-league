@@ -1,4 +1,4 @@
-export type EventType = "quali" | "sprint_quali" | "sprint" | "race";
+export type EventType = "quali" | "sprint" | "race";
 
 export type DriverResult = {
   driver_id: string;

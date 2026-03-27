@@ -2,12 +2,12 @@ import { scoreEvent } from "@/lib/scoring";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { EventType } from "@/lib/types";
 
-const allEvents: EventType[] = ["quali", "sprint_quali", "sprint", "race"];
+const events: EventType[] = ["quali", "sprint", "race"];
 
 export async function recomputeAllScores() {
   const supabase = getSupabaseAdmin();
 
-  // Fetch everything in bulk queries instead of N×M×4 individual ones
+  // Fetch everything in 3 bulk queries instead of N×M×3 individual ones
   const [{ data: races }, { data: users }, { data: allPreds }, { data: allResults }] =
     await Promise.all([
       supabase.from("race_weekends").select("id,has_sprint"),
@@ -52,41 +52,26 @@ export async function recomputeAllScores() {
   }[] = [];
 
   for (const race of races) {
-    // Sessions active for this race weekend
-    const activeEvents = allEvents.filter(
-      (e) => race.has_sprint || (e !== "sprint_quali" && e !== "sprint")
-    );
-    const requiredForMegabonus = race.has_sprint
-      ? (["quali", "sprint_quali", "sprint", "race"] as EventType[])
-      : (["quali", "race"] as EventType[]);
-
     for (const user of users) {
       let weekendPoints = 0, weekendError = 0, weekendExact = 0;
 
-      // Track which sessions this user got a perfect podium in
-      const perfectPodiumSessions = new Set<EventType>();
+      for (const eventType of events) {
+        if (eventType === "sprint" && !race.has_sprint) continue;
 
-      for (const eventType of activeEvents) {
         const preds = predIndex.get(race.id)?.get(eventType)?.get(user.id) ?? [];
         const results = resultIndex.get(race.id)?.get(eventType) ?? [];
         if (!preds.length || !results.length) continue;
 
-        const score = scoreEvent(eventType, preds, results, race.has_sprint);
+        const score = scoreEvent(eventType, preds, results);
         weekendPoints += score.points;
         weekendError += score.totalError;
         weekendExact += score.exactMatches;
-
-        if (score.podiumExact) perfectPodiumSessions.add(eventType);
 
         scoreRows.push({
           user_id: user.id, race_id: race.id, event_type: eventType,
           points: score.points, total_error: score.totalError, exact_matches: score.exactMatches
         });
       }
-
-      // Megabonus: +50 if user had a perfect podium in every session of this weekend
-      const hasMegabonus = requiredForMegabonus.every((e) => perfectPodiumSessions.has(e));
-      if (hasMegabonus) weekendPoints += 50;
 
       weekendRows.push({
         user_id: user.id, race_id: race.id,
