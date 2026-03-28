@@ -8,8 +8,10 @@ export const dynamic = "force-dynamic";
 // Minutes before each session start at which we send a reminder
 const REMINDER_INTERVALS_MINUTES = [48 * 60, 24 * 60, 12 * 60, 6 * 60, 3 * 60, 60, 5];
 
-// How wide a window (minutes) the cron can match a threshold (cron runs every 15 min)
-const MATCH_WINDOW_MINUTES = 15;
+// How long after a threshold we'll still send the reminder.
+// Set to 6h so GitHub Actions delays (which can be 30-120+ min) don't silently drop emails.
+// notification_log dedup ensures each interval is only sent once even if cron fires many times.
+const MATCH_WINDOW_MINUTES = 6 * 60;
 
 type EventType = "quali" | "sprint" | "race";
 
