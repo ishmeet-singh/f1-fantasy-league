@@ -95,15 +95,15 @@ async function syncCalendarOpenF1(year: number) {
 }
 
 export async function syncCalendar(year = new Date().getUTCFullYear()) {
-  // OpenF1 is primary — it's working and all races already have OpenF1 IDs in DB.
-  // Switching sources mid-season would create duplicate race entries.
+  // OpenF1 is the sole authoritative source for calendar IDs.
+  // We never fall back to Jolpi here — it uses different IDs (jolpi-YYYY-R) which
+  // would create duplicate race entries alongside the existing OpenF1-keyed rows.
+  // Jolpi is only used for results as a fallback, not for calendar structure.
   try {
     await syncCalendarOpenF1(year);
     console.log("Calendar synced via OpenF1");
   } catch (openF1Err) {
-    console.warn("OpenF1 calendar sync failed, falling back to Jolpi:", openF1Err);
-    await syncCalendarJolpi(year);
-    console.log("Calendar synced via Jolpi/Ergast");
+    console.warn("OpenF1 calendar sync failed — skipping Jolpi fallback to avoid duplicate race IDs:", openF1Err);
   }
 }
 
