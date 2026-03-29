@@ -9,9 +9,8 @@ export const dynamic = "force-dynamic";
 const REMINDER_INTERVALS_MINUTES = [48 * 60, 24 * 60, 12 * 60, 6 * 60, 3 * 60, 60, 5];
 
 // How long after a threshold we'll still send the reminder.
-// Set to 6h so GitHub Actions delays (which can be 30-120+ min) don't silently drop emails.
-// notification_log dedup ensures each interval is only sent once even if cron fires many times.
-const MATCH_WINDOW_MINUTES = 6 * 60;
+// 90 min covers typical GitHub Actions delays without catching multiple intervals at once.
+const MATCH_WINDOW_MINUTES = 90;
 
 type EventType = "quali" | "sprint" | "race";
 
@@ -105,6 +104,22 @@ export async function GET(request: Request) {
 
         for (const user of targets) {
           try {
+            // Claim the notification_log slot FIRST (before sending) to prevent race
+            // conditions where two concurrent cron runs both send the same reminder.
+            // The unique constraint on (user_id, race_id, event_type, interval_label)
+            // means only one run wins — the other gets a conflict error and skips.
+            const { error: claimError } = await supabase.from("notification_log").insert({
+              user_id: user.id,
+              race_id: race.id,
+              event_type: eventType,
+              interval_label: label
+            });
+            if (claimError) {
+              // Another concurrent run already claimed this slot — skip
+              skipped++;
+              continue;
+            }
+
             // For reminders with < 1 h to go, generate a one-time magic link so the user
             // is signed in automatically on click. For longer-horizon reminders the link
             // would already have expired (Supabase default OTP expiry = 1 h), so we fall
@@ -121,7 +136,6 @@ export async function GET(request: Request) {
               });
               if (linkError || !linkData?.properties?.action_link) {
                 console.warn(`Magic link generation failed for ${user.email}, using plain URL:`, linkError);
-                // fall through — picksLink stays as the plain app URL
               } else {
                 picksLink = linkData.properties.action_link;
               }
@@ -135,13 +149,6 @@ export async function GET(request: Request) {
               minutesLeft: intervalMins,
               picksLink,
               isMagicLink: intervalMins <= 60
-            });
-
-            await supabase.from("notification_log").insert({
-              user_id: user.id,
-              race_id: race.id,
-              event_type: eventType,
-              interval_label: label
             });
 
             sent++;
