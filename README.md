@@ -78,9 +78,16 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 OPENF1_BASE_URL=https://api.openf1.org
+# Optional — required when a live F1 session is running (OpenF1 restricts the whole public API).
+OPENF1_USERNAME=
+OPENF1_PASSWORD=
 ADMIN_ALLOWLIST=you@example.com
 CRON_SECRET=replace-with-a-long-random-string
 ```
+
+### OpenF1 401 during race weekends
+
+The hosted OpenF1 API may return **401** with a message like *“Live F1 session in progress…”* for **all** requests until the session ends, unless you authenticate with a [sponsor/API account](https://openf1.org/auth.html). Set `OPENF1_USERNAME` and `OPENF1_PASSWORD` in production (and locally) so the app can obtain a short‑lived Bearer token automatically.
 
 ## Supabase setup
 1. Create a new Supabase project.
@@ -94,7 +101,7 @@ CRON_SECRET=replace-with-a-long-random-string
 
 ## OpenF1 ingestion
 Implemented via:
-- `lib/openf1.ts`
+- `lib/openf1.ts` (REST calls; optional OAuth via `lib/openf1-token.ts`)
 - `lib/sync.ts`
 
 What gets synced:

@@ -10,6 +10,7 @@ import {
   fetchAllJolpiSprintResults,
   fetchJolpiRaces,
 } from "@/lib/jolpi";
+import { applyScheduleOverridesAfterCalendarSync } from "@/lib/schedule-overrides";
 
 function findSessionStart(sessions: { session_name: string; date_start: string }[], names: string[]) {
   const found = sessions.find((session) => names.includes(session.session_name));
@@ -104,6 +105,12 @@ export async function syncCalendar(year = new Date().getUTCFullYear()) {
     console.log("Calendar synced via OpenF1");
   } catch (openF1Err) {
     console.warn("OpenF1 calendar sync failed — skipping Jolpi fallback to avoid duplicate race IDs:", openF1Err);
+  } finally {
+    try {
+      await applyScheduleOverridesAfterCalendarSync(getSupabaseAdmin());
+    } catch (overrideErr) {
+      console.warn("Schedule overrides failed:", overrideErr);
+    }
   }
 }
 

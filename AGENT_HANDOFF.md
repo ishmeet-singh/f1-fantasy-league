@@ -60,6 +60,7 @@ Fill:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENF1_BASE_URL` (default `https://api.openf1.org`)
+- Optional `OPENF1_USERNAME` / `OPENF1_PASSWORD` — OpenF1 returns 401 for all endpoints while a live F1 session runs unless authenticated ([openf1.org/auth.html](https://openf1.org/auth.html)).
 - `ADMIN_ALLOWLIST`
 
 ### 3) Supabase setup

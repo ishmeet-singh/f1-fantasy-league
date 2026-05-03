@@ -1,5 +1,6 @@
 import { assertAdmin } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { openF1Get } from "@/lib/openf1";
 import { NextResponse } from "next/server";
 
 /**
@@ -31,8 +32,7 @@ export async function POST() {
   }
 
   // 2. Fetch from OpenF1 for all sessions in 2026 (get complete driver data)
-  const OPENF1_BASE = process.env.OPENF1_BASE_URL || "https://api.openf1.org";
-  const sessionRes = await fetch(`${OPENF1_BASE}/v1/sessions?year=2026&session_name=Race`, { next: { revalidate: 0 } });
+  const sessionRes = await openF1Get("/v1/sessions?year=2026&session_name=Race");
   const sessions: { session_key: number; meeting_key: number }[] = sessionRes.ok ? await sessionRes.json() : [];
 
   // Build a map of driver_number -> name from ALL race sessions we have
@@ -40,7 +40,7 @@ export async function POST() {
 
   for (const session of sessions) {
     try {
-      const dRes = await fetch(`${OPENF1_BASE}/v1/drivers?session_key=${session.session_key}`, { next: { revalidate: 0 } });
+      const dRes = await openF1Get(`/v1/drivers?session_key=${session.session_key}`);
       if (!dRes.ok) continue;
       const drivers: { driver_number: number; full_name: string; team_name?: string }[] = await dRes.json();
       for (const d of drivers) {
