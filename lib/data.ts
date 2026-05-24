@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { bestNWeekendTotal } from "@/lib/scoring";
+import { bestNWeekendTotal, BEST_WEEKENDS_COUNT } from "@/lib/scoring";
 import { syncCalendar } from "@/lib/sync";
 import { fetchF1DriverStandings, type F1DriverStanding } from "@/lib/jolpi";
 
@@ -99,7 +99,7 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
       return {
         id: u.id,
         name: u.display_name || u.email,
-        score: bestNWeekendTotal(agg.points, 20),
+        score: bestNWeekendTotal(agg.points, BEST_WEEKENDS_COUNT),
         error: agg.error,
         exact: agg.exact,
         top: Math.max(0, ...agg.points)
@@ -211,7 +211,7 @@ export async function getPersonalStats(userId: string): Promise<PersonalStats | 
   if (!myScores?.length) return null;
 
   const points = myScores.map((s) => s.total_points || 0);
-  const totalPoints = bestNWeekendTotal(points, 20);
+  const totalPoints = bestNWeekendTotal(points, BEST_WEEKENDS_COUNT);
   const bestWeekend = Math.max(0, ...points);
   const exactMatches = myScores.reduce((sum, s) => sum + (s.exact_matches || 0), 0);
 

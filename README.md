@@ -10,7 +10,7 @@ Minimal, production-ready Formula 1 prediction league for private groups.
 
 ## Core functionality
 - Magic-link login
-- Leaderboard with **best 20 weekend scores**
+- Leaderboard with **best 18 weekend scores** (2026: 22 rounds after Bahrain & Saudi cancellations)
 - Picks:
   - Qualifying Top 3
   - Sprint Top 10 (sprint weekends only)

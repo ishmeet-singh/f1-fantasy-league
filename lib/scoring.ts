@@ -68,7 +68,31 @@ export function scoreEvent(
   return { points, totalError, exactMatches, podiumExact };
 }
 
-export function bestNWeekendTotal(weekendTotals: number[], bestCount = 20) {
+/** Season standings count only this many highest weekend totals (24 races − 2 cancelled in 2026). */
+export const BEST_WEEKENDS_COUNT = 18;
+
+/** Rows for rules UI: points per pick at each error distance. */
+export function pickScoreRows(max: number, penalty: number): { label: string; points: number }[] {
+  const rows: { label: string; points: number }[] = [];
+  for (let diff = 0; diff <= 20; diff++) {
+    const pts = Math.max(0, max - diff * penalty);
+    if (pts === 0) {
+      rows.push({ label: diff === 0 ? "Any error" : `Off by ${diff}+ places`, points: 0 });
+      break;
+    }
+    rows.push({
+      label: diff === 0 ? "Exact (off by 0)" : diff === 1 ? "Off by 1 place" : `Off by ${diff} places`,
+      points: pts
+    });
+    if (Math.max(0, max - (diff + 1) * penalty) === 0) {
+      rows.push({ label: `Off by ${diff + 1}+ places`, points: 0 });
+      break;
+    }
+  }
+  return rows;
+}
+
+export function bestNWeekendTotal(weekendTotals: number[], bestCount = BEST_WEEKENDS_COUNT) {
   return weekendTotals
     .slice()
     .sort((a, b) => b - a)

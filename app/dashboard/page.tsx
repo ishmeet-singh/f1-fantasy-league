@@ -90,7 +90,7 @@ export default async function DashboardPage() {
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">Leaderboard</h2>
-          <span className="text-xs text-slate-500">Best 20 races · tap row for history</span>
+          <span className="text-xs text-slate-500">Best 18 races · tap row for history</span>
         </div>
         <LeaderboardFull
           leaderboard={leaderboard}

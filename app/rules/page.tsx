@@ -1,5 +1,16 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import {
+  BEST_WEEKENDS_COUNT,
+  getEventConfig,
+  pickScoreRows
+} from "@/lib/scoring";
 import { redirect } from "next/navigation";
+
+const normalQuali = getEventConfig("quali", false);
+const normalRace = getEventConfig("race", false);
+const sprintQuali = getEventConfig("quali", true);
+const sprintSession = getEventConfig("sprint", true);
+const sprintRace = getEventConfig("race", true);
 
 export default async function RulesPage() {
   const supabase = createServerSupabase();
@@ -12,119 +23,162 @@ export default async function RulesPage() {
     <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold">How to Play</h1>
-        <p className="text-slate-400 mt-1 text-sm">F1 Friends League</p>
+        <p className="text-slate-400 mt-1 text-sm">Rules and scoring for F1 Friends League</p>
       </div>
 
-      <Section title="The basics">
+      <Section title="Overview">
         <p className="text-slate-300 leading-relaxed">
-          Predict finishing positions before each session. Closer picks earn more points.
-          Highest season total wins. Your season score uses your{" "}
-          <strong className="text-white">best 20 weekends</strong>.
+          Before each race weekend, predict where drivers will finish in Qualifying, Sprint (on sprint
+          weekends), and the Race. Points are awarded <strong className="text-white">per pick</strong> — the
+          closer you are to the actual position, the more you earn.
+        </p>
+        <p className="text-slate-300 leading-relaxed mt-3">
+          Season standings use your <strong className="text-white">best {BEST_WEEKENDS_COUNT} race weekends</strong>{" "}
+          (Bahrain and Saudi Arabia 2026 were cancelled, so the calendar is 22 rounds instead of 24).
+          You can miss a few weekends without hurting your total.
         </p>
       </Section>
 
-      <Section title="Picks">
-        <div className="rounded-lg border border-slate-800 overflow-hidden text-sm">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-slate-800/60 text-left text-xs text-slate-400 uppercase">
-                <th className="px-4 py-2">Session</th>
-                <th className="px-4 py-2">You pick</th>
-              </tr>
-            </thead>
-            <tbody className="text-slate-300">
-              <tr className="border-t border-slate-800">
-                <td className="px-4 py-2.5">🏁 Qualifying</td>
-                <td className="px-4 py-2.5">Top 3 in order</td>
-              </tr>
-              <tr className="border-t border-slate-800 bg-slate-800/20">
-                <td className="px-4 py-2.5">⚡ Sprint</td>
-                <td className="px-4 py-2.5">Top 10 (sprint weekends only)</td>
-              </tr>
-              <tr className="border-t border-slate-800">
-                <td className="px-4 py-2.5">🏆 Race</td>
-                <td className="px-4 py-2.5">Top 10 in order</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      <Section title="Picks & deadlines">
+        <ul className="space-y-2 text-sm text-slate-300">
+          <li className="flex gap-2">
+            <span className="text-red-400 shrink-0">▸</span>
+            <span>
+              <strong className="text-white">Qualifying</strong> — top 3 in order (P1, P2, P3).
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-red-400 shrink-0">▸</span>
+            <span>
+              <strong className="text-white">Sprint</strong> — top 10 in order (sprint weekends only).
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-red-400 shrink-0">▸</span>
+            <span>
+              <strong className="text-white">Race</strong> — top 10 in order.
+            </span>
+          </li>
+        </ul>
         <ul className="mt-4 space-y-2 text-sm text-slate-400">
-          <li>Window opens <strong className="text-slate-300">48h before the first session</strong> of the weekend.</li>
-          <li>Each session <strong className="text-slate-300">locks at its start time</strong> — edit freely until then.</li>
-          <li>Reminder emails if you have not submitted yet.</li>
+          <li>Picks open <strong className="text-slate-300">48 hours before the first session</strong> of the weekend.</li>
+          <li>Each session locks at <strong className="text-slate-300">its scheduled start</strong> — you can edit until then.</li>
+          <li>Reminder emails if you have not submitted for that session.</li>
         </ul>
       </Section>
 
-      <Section title="Scoring">
-        <p className="text-slate-300 text-sm leading-relaxed">
-          Each pick starts at a <strong className="text-white">max value</strong>, minus a{" "}
-          <strong className="text-white">penalty per place</strong> you are wrong (minimum 0).
-          Get exact P1, P2, and P3 in a session for a <strong className="text-yellow-300">podium bonus</strong>.
-        </p>
-
-        <div className="rounded-lg border border-slate-800 overflow-hidden text-sm mt-4">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-slate-800/60 text-left text-xs text-slate-400 uppercase">
-                <th className="px-4 py-2">Session</th>
-                <th className="px-4 py-2 text-right">Max</th>
-                <th className="px-4 py-2 text-right">Per place off</th>
-                <th className="px-4 py-2 text-right">Podium</th>
-              </tr>
-            </thead>
-            <tbody className="text-slate-300">
-              <tr className="border-t border-slate-800">
-                <td className="px-4 py-2.5 text-slate-500 text-xs" colSpan={4}>
-                  Normal weekend
-                </td>
-              </tr>
-              <tr className="border-t border-slate-800">
-                <td className="px-4 py-2.5">Qualifying</td>
-                <td className="px-4 py-2.5 text-right font-mono">12</td>
-                <td className="px-4 py-2.5 text-right font-mono">−4</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400 font-mono">+6</td>
-              </tr>
-              <tr className="border-t border-slate-800">
-                <td className="px-4 py-2.5">Race</td>
-                <td className="px-4 py-2.5 text-right font-mono">12</td>
-                <td className="px-4 py-2.5 text-right font-mono">−2</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400 font-mono">+10</td>
-              </tr>
-              <tr className="border-t border-slate-800">
-                <td className="px-4 py-2.5 text-slate-500 text-xs" colSpan={4}>
-                  Sprint weekend <span className="normal-case text-slate-600">(same 172 pt cap)</span>
-                </td>
-              </tr>
-              <tr className="border-t border-slate-800 bg-slate-800/20">
-                <td className="px-4 py-2.5">Qualifying</td>
-                <td className="px-4 py-2.5 text-right font-mono">7</td>
-                <td className="px-4 py-2.5 text-right font-mono">−2</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400 font-mono">+6</td>
-              </tr>
-              <tr className="border-t border-slate-800 bg-slate-800/20">
-                <td className="px-4 py-2.5">Sprint</td>
-                <td className="px-4 py-2.5 text-right font-mono">4</td>
-                <td className="px-4 py-2.5 text-right font-mono">−1</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400 font-mono">+5</td>
-              </tr>
-              <tr className="border-t border-slate-800 bg-slate-800/20">
-                <td className="px-4 py-2.5">Race</td>
-                <td className="px-4 py-2.5 text-right font-mono">10</td>
-                <td className="px-4 py-2.5 text-right font-mono">−2</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400 font-mono">+10</td>
-              </tr>
-            </tbody>
-          </table>
+      <Section title="How points work">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 text-sm text-slate-300 space-y-2">
+          <p>
+            For <strong className="text-white">each driver you pick</strong>:
+          </p>
+          <p className="font-mono text-center text-white py-1">
+            points = max(0, max pts − places off × penalty)
+          </p>
+          <p>
+            &quot;Places off&quot; is how far your predicted position is from where that driver actually finished.
+            If a driver is not in the results, they are treated as P22 for scoring.
+          </p>
         </div>
 
-        <p className="text-sm text-slate-500 mt-3">
-          Example: exact quali pick = 12 pts; off by 1 = 8 pts. Race rewards accuracy on all 10 picks;
-          sprint weekends use lower caps so the extra session does not inflate the weekend total.
-        </p>
+        <div className="mt-4 rounded-lg border border-yellow-700/50 bg-yellow-950/20 p-4 text-sm">
+          <p className="font-semibold text-yellow-300">Perfect podium bonus</p>
+          <p className="text-slate-300 mt-1 leading-relaxed">
+            If you get <strong className="text-white">P1, P2, and P3 exactly right</strong> (correct drivers in
+            correct order) in one session, you get an extra bonus on top of that session&apos;s pick points:
+            <strong className="text-yellow-300"> +6</strong> for Qualifying,{" "}
+            <strong className="text-yellow-300">+5</strong> for Sprint,{" "}
+            <strong className="text-yellow-300">+10</strong> for Race.
+          </p>
+        </div>
+      </Section>
 
-        <p className="text-sm text-slate-400 mt-4">
-          <strong className="text-white">Perfect weekend max: 172 points</strong> — normal or sprint weekend.
+      <Section title="Normal weekend scoring">
+        <p className="text-slate-400 text-sm mb-4">
+          Two sessions: Qualifying + Race. Weekend total = quali points + race points (including podium bonuses).
         </p>
+        <div className="space-y-4">
+          <SessionScoring
+            name="Qualifying"
+            icon="🏁"
+            picks="3 picks"
+            max={normalQuali.max}
+            penalty={normalQuali.penalty}
+            podiumBonus={normalQuali.podiumBonus}
+          />
+          <SessionScoring
+            name="Race"
+            icon="🏆"
+            picks="10 picks"
+            max={normalRace.max}
+            penalty={normalRace.penalty}
+            podiumBonus={normalRace.podiumBonus}
+          />
+        </div>
+        <WeekendMaxTable
+          rows={[
+            { session: "Qualifying", base: 36, podium: 6, max: 42 },
+            { session: "Race", base: 120, podium: 10, max: 130 }
+          ]}
+          total={{ base: 156, podium: 16, max: 172 }}
+        />
+      </Section>
+
+      <Section title="Sprint weekend scoring">
+        <p className="text-slate-400 text-sm mb-4">
+          Three sessions: Qualifying + Sprint + Race. Per-pick values are lower than on a normal weekend so the{" "}
+          <strong className="text-slate-300">weekend maximum stays 172 points</strong> — same as a normal weekend.
+          The race still has the highest max per pick.
+        </p>
+        <div className="space-y-4">
+          <SessionScoring
+            name="Qualifying"
+            icon="🏁"
+            picks="3 picks"
+            max={sprintQuali.max}
+            penalty={sprintQuali.penalty}
+            podiumBonus={sprintQuali.podiumBonus}
+          />
+          <SessionScoring
+            name="Sprint"
+            icon="⚡"
+            picks="10 picks"
+            max={sprintSession.max}
+            penalty={sprintSession.penalty}
+            podiumBonus={sprintSession.podiumBonus}
+          />
+          <SessionScoring
+            name="Race"
+            icon="🏆"
+            picks="10 picks"
+            max={sprintRace.max}
+            penalty={sprintRace.penalty}
+            podiumBonus={sprintRace.podiumBonus}
+          />
+        </div>
+        <WeekendMaxTable
+          rows={[
+            { session: "Qualifying", base: 21, podium: 6, max: 27 },
+            { session: "Sprint", base: 40, podium: 5, max: 45 },
+            { session: "Race", base: 100, podium: 10, max: 110 }
+          ]}
+          total={{ base: 151, podium: 21, max: 172 }}
+        />
+      </Section>
+
+      <Section title="Season standings">
+        <ul className="space-y-2 text-sm text-slate-300">
+          <li className="flex gap-2">
+            <span className="text-red-400 shrink-0">▸</span>
+            <span>
+              Your season score = sum of your <strong className="text-white">best {BEST_WEEKENDS_COUNT} weekend totals</strong>.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-red-400 shrink-0">▸</span>
+            <span>Leaderboard updates after each session&apos;s results are synced.</span>
+          </li>
+        </ul>
       </Section>
     </div>
   );
@@ -136,5 +190,89 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="text-lg font-semibold text-white border-b border-slate-800 pb-2">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function SessionScoring({
+  name,
+  icon,
+  picks,
+  max,
+  penalty,
+  podiumBonus
+}: {
+  name: string;
+  icon: string;
+  picks: string;
+  max: number;
+  penalty: number;
+  podiumBonus: number;
+}) {
+  const rows = pickScoreRows(max, penalty);
+  return (
+    <div>
+      <p className="text-sm font-medium text-slate-300 mb-1">
+        {icon} {name}{" "}
+        <span className="text-slate-500 font-normal">
+          ({picks} · {max} pts max per pick · −{penalty}/place · +{podiumBonus} podium)
+        </span>
+      </p>
+      <div className="rounded-lg overflow-hidden border border-slate-800">
+        <table className="w-full text-sm">
+          <tbody>
+            {rows.map((r, i) => (
+              <tr
+                key={r.label}
+                className={`${i % 2 ? "bg-slate-800/20" : ""} border-t border-slate-800 first:border-0`}
+              >
+                <td className="px-4 py-2 text-slate-400">{r.label}</td>
+                <td className="px-4 py-2 text-right font-mono font-semibold text-white">
+                  {r.points > 0 ? `${r.points} pts` : <span className="text-slate-600">0</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function WeekendMaxTable({
+  rows,
+  total
+}: {
+  rows: { session: string; base: number; podium: number; max: number }[];
+  total: { base: number; podium: number; max: number };
+}) {
+  return (
+    <div className="mt-4 rounded-lg overflow-hidden border border-slate-800 text-sm">
+      <table className="w-full">
+        <thead>
+          <tr className="bg-slate-800/60 text-left text-xs text-slate-400 uppercase">
+            <th className="px-4 py-2">If every pick is exact…</th>
+            <th className="px-4 py-2 text-right">Pick pts</th>
+            <th className="px-4 py-2 text-right">+ Podium</th>
+            <th className="px-4 py-2 text-right">Session max</th>
+          </tr>
+        </thead>
+        <tbody className="text-slate-300">
+          {rows.map((r) => (
+            <tr key={r.session} className="border-t border-slate-800">
+              <td className="px-4 py-2">{r.session}</td>
+              <td className="px-4 py-2 text-right">{r.base}</td>
+              <td className="px-4 py-2 text-right text-yellow-400">+{r.podium}</td>
+              <td className="px-4 py-2 text-right font-semibold text-white">{r.max}</td>
+            </tr>
+          ))}
+          <tr className="border-t-2 border-slate-700 bg-slate-800/40">
+            <td className="px-4 py-2 font-semibold text-white">Weekend total</td>
+            <td className="px-4 py-2 text-right">{total.base}</td>
+            <td className="px-4 py-2 text-right text-yellow-400">+{total.podium}</td>
+            <td className="px-4 py-2 text-right font-bold text-red-400">{total.max}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -102,7 +102,7 @@ export function LeaderboardFull({
                   ))}
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-700/50 flex justify-between text-xs">
-                  <span className="text-slate-500">Season total (best 20)</span>
+                  <span className="text-slate-500">Season total (best 18)</span>
                   <span className="font-bold text-white">{entry.score} pts</span>
                 </div>
               </div>
