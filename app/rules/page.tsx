@@ -85,10 +85,13 @@ export default async function RulesPage() {
           <p className="font-semibold text-yellow-300">Perfect podium bonus</p>
           <p className="text-slate-300 mt-1 leading-relaxed">
             If you get <strong className="text-white">P1, P2, and P3 exactly right</strong> (correct drivers in
-            correct order) in one session, you get an extra bonus on top of that session&apos;s pick points:
-            <strong className="text-yellow-300"> +6</strong> for Qualifying,{" "}
-            <strong className="text-yellow-300">+5</strong> for Sprint,{" "}
-            <strong className="text-yellow-300">+10</strong> for Race.
+            correct order) in one session, you get an extra bonus on top of that session&apos;s pick points.
+            Normal weekend: <strong className="text-yellow-300">+6</strong> Qualifying,{" "}
+            <strong className="text-yellow-300">+10</strong> Race.
+            Sprint weekend: <strong className="text-yellow-300">+6</strong> Qualifying,{" "}
+            <strong className="text-yellow-300">+3</strong> Sprint,{" "}
+            <strong className="text-yellow-300">+7</strong> Race (also <strong className="text-white">+16</strong>{" "}
+            combined).
           </p>
         </div>
       </Section>
@@ -126,9 +129,10 @@ export default async function RulesPage() {
 
       <Section title="Sprint weekend scoring">
         <p className="text-slate-400 text-sm mb-4">
-          Three sessions: Qualifying + Sprint + Race. Per-pick values are lower than on a normal weekend so the{" "}
-          <strong className="text-slate-300">weekend maximum stays 172 points</strong> — same as a normal weekend.
-          The race still has the highest max per pick.
+          Three sessions: Qualifying + Sprint + Race. Qualifying uses the <strong className="text-slate-300">same</strong>{" "}
+          per-pick values as a normal weekend; Sprint and Race use lower caps so the extra session does not change the
+          weekend total. A perfect sprint weekend is also <strong className="text-slate-300">156 pick points + 16 podium
+          = 172</strong> — same as normal. Race still earns the most pick points overall (10×8).
         </p>
         <div className="space-y-4">
           <SessionScoring
@@ -158,11 +162,11 @@ export default async function RulesPage() {
         </div>
         <WeekendMaxTable
           rows={[
-            { session: "Qualifying", base: 21, podium: 6, max: 27 },
-            { session: "Sprint", base: 40, podium: 5, max: 45 },
-            { session: "Race", base: 100, podium: 10, max: 110 }
+            { session: "Qualifying", base: 36, podium: 6, max: 42 },
+            { session: "Sprint", base: 40, podium: 3, max: 43 },
+            { session: "Race", base: 80, podium: 7, max: 87 }
           ]}
-          total={{ base: 151, podium: 21, max: 172 }}
+          total={{ base: 156, podium: 16, max: 172 }}
         />
       </Section>
 
