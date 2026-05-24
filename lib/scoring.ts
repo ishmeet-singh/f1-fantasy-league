@@ -10,12 +10,12 @@ const normalConfig: Record<EventType, Config> = {
 };
 
 // Sprint weekend — same 156 pick base, +16 podium, 172 max as normal weekends.
-// Integer caps: quali 12×3 + sprint 4×10 + race 8×10 = 156; podiums +6 +3 +7 = 16.
-// Race still has the highest session total (80 pick pts); quali matches normal quali.
+// Pick caps: quali 12×3 + sprint 4×10 + race 8×10 = 156.
+// Podiums match normal quali/race ratio (+6 / +10); no sprint podium bonus so race stays ~62% of +16.
 const sprintWeekendConfig: Record<EventType, Config> = {
   quali: { max: 12, penalty: 4, podiumBonus: 6, podiumSize: 3 },
-  sprint: { max: 4, penalty: 1, podiumBonus: 3, podiumSize: 3 },
-  race: { max: 8, penalty: 2, podiumBonus: 7, podiumSize: 3 }
+  sprint: { max: 4, penalty: 1, podiumBonus: 0, podiumSize: 3 },
+  race: { max: 8, penalty: 2, podiumBonus: 10, podiumSize: 3 }
 };
 
 export function getEventConfig(eventType: EventType, hasSprint = false): Config {
