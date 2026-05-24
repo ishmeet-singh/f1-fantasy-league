@@ -85,16 +85,15 @@ export default async function RulesPage() {
       <Section title="Scoring System">
         <p className="text-slate-400 text-sm mb-4">
           Points are awarded per pick based on how close your predicted position is to the actual finishing position.
+          On <strong className="text-white">sprint weekends</strong>, per-pick values are lower so the weekend maximum
+          stays the same as a normal weekend (172 pts) — the race still earns the most per pick.
         </p>
 
+        <p className="text-sm font-medium text-slate-300 mb-2">Normal weekend</p>
         <div className="space-y-4">
-          {/* Qualifying */}
           <ScoringTable
             event="Qualifying"
             icon="🏁"
-            basePoints={12}
-            penaltyPerPlace={4}
-            podiumBonus={6}
             rows={[
               { label: "Exact (off by 0)", points: 12 },
               { label: "Off by 1 place", points: 8 },
@@ -102,32 +101,9 @@ export default async function RulesPage() {
               { label: "Off by 3+ places", points: 0 }
             ]}
           />
-
-          {/* Sprint */}
-          <ScoringTable
-            event="Sprint"
-            icon="⚡"
-            basePoints={6}
-            penaltyPerPlace={1}
-            podiumBonus={5}
-            rows={[
-              { label: "Exact (off by 0)", points: 6 },
-              { label: "Off by 1 place", points: 5 },
-              { label: "Off by 2 places", points: 4 },
-              { label: "Off by 3 places", points: 3 },
-              { label: "Off by 4 places", points: 2 },
-              { label: "Off by 5 places", points: 1 },
-              { label: "Off by 6+ places", points: 0 }
-            ]}
-          />
-
-          {/* Race */}
           <ScoringTable
             event="Race"
             icon="🏆"
-            basePoints={12}
-            penaltyPerPlace={2}
-            podiumBonus={10}
             rows={[
               { label: "Exact (off by 0)", points: 12 },
               { label: "Off by 1 place", points: 10 },
@@ -136,6 +112,43 @@ export default async function RulesPage() {
               { label: "Off by 4 places", points: 4 },
               { label: "Off by 5 places", points: 2 },
               { label: "Off by 6+ places", points: 0 }
+            ]}
+          />
+        </div>
+
+        <p className="text-sm font-medium text-slate-300 mt-6 mb-2">Sprint weekend (Qualifying + Sprint + Race)</p>
+        <div className="space-y-4">
+          <ScoringTable
+            event="Qualifying"
+            icon="🏁"
+            rows={[
+              { label: "Exact (off by 0)", points: 7 },
+              { label: "Off by 1 place", points: 5 },
+              { label: "Off by 2 places", points: 3 },
+              { label: "Off by 3+ places", points: 0 }
+            ]}
+          />
+          <ScoringTable
+            event="Sprint"
+            icon="⚡"
+            rows={[
+              { label: "Exact (off by 0)", points: 4 },
+              { label: "Off by 1 place", points: 3 },
+              { label: "Off by 2 places", points: 2 },
+              { label: "Off by 3 places", points: 1 },
+              { label: "Off by 4+ places", points: 0 }
+            ]}
+          />
+          <ScoringTable
+            event="Race"
+            icon="🏆"
+            rows={[
+              { label: "Exact (off by 0)", points: 10 },
+              { label: "Off by 1 place", points: 8 },
+              { label: "Off by 2 places", points: 6 },
+              { label: "Off by 3 places", points: 4 },
+              { label: "Off by 4 places", points: 2 },
+              { label: "Off by 5+ places", points: 0 }
             ]}
           />
         </div>
@@ -201,16 +214,15 @@ export default async function RulesPage() {
             </thead>
             <tbody className="text-slate-300">
               <tr className="border-t border-slate-800">
+                <td className="px-4 py-2.5" colSpan={4}>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Normal weekend</span>
+                </td>
+              </tr>
+              <tr className="border-t border-slate-800">
                 <td className="px-4 py-2.5">🏁 Qualifying (3 picks)</td>
                 <td className="px-4 py-2.5 text-right">36</td>
                 <td className="px-4 py-2.5 text-right text-yellow-400">+6</td>
                 <td className="px-4 py-2.5 text-right font-bold text-white">42</td>
-              </tr>
-              <tr className="border-t border-slate-800 bg-slate-800/20">
-                <td className="px-4 py-2.5">⚡ Sprint (10 picks)</td>
-                <td className="px-4 py-2.5 text-right">60</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400">+5</td>
-                <td className="px-4 py-2.5 text-right font-bold text-white">65</td>
               </tr>
               <tr className="border-t border-slate-800">
                 <td className="px-4 py-2.5">🏆 Race (10 picks)</td>
@@ -218,16 +230,39 @@ export default async function RulesPage() {
                 <td className="px-4 py-2.5 text-right text-yellow-400">+10</td>
                 <td className="px-4 py-2.5 text-right font-bold text-white">130</td>
               </tr>
-              <tr className="border-t-2 border-slate-700 bg-slate-800/40">
-                <td className="px-4 py-2.5 font-semibold text-white">Sprint weekend total</td>
-                <td className="px-4 py-2.5 text-right">216</td>
-                <td className="px-4 py-2.5 text-right text-yellow-400">+21</td>
-                <td className="px-4 py-2.5 text-right font-bold text-red-400">237</td>
-              </tr>
               <tr className="border-t border-slate-700 bg-slate-800/40">
                 <td className="px-4 py-2.5 font-semibold text-white">Normal weekend total</td>
                 <td className="px-4 py-2.5 text-right">156</td>
                 <td className="px-4 py-2.5 text-right text-yellow-400">+16</td>
+                <td className="px-4 py-2.5 text-right font-bold text-red-400">172</td>
+              </tr>
+              <tr className="border-t border-slate-800">
+                <td className="px-4 py-2.5" colSpan={4}>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sprint weekend</span>
+                </td>
+              </tr>
+              <tr className="border-t border-slate-800 bg-slate-800/20">
+                <td className="px-4 py-2.5">🏁 Qualifying (3 picks)</td>
+                <td className="px-4 py-2.5 text-right">21</td>
+                <td className="px-4 py-2.5 text-right text-yellow-400">+6</td>
+                <td className="px-4 py-2.5 text-right font-bold text-white">27</td>
+              </tr>
+              <tr className="border-t border-slate-800 bg-slate-800/20">
+                <td className="px-4 py-2.5">⚡ Sprint (10 picks)</td>
+                <td className="px-4 py-2.5 text-right">40</td>
+                <td className="px-4 py-2.5 text-right text-yellow-400">+5</td>
+                <td className="px-4 py-2.5 text-right font-bold text-white">45</td>
+              </tr>
+              <tr className="border-t border-slate-800 bg-slate-800/20">
+                <td className="px-4 py-2.5">🏆 Race (10 picks)</td>
+                <td className="px-4 py-2.5 text-right">100</td>
+                <td className="px-4 py-2.5 text-right text-yellow-400">+10</td>
+                <td className="px-4 py-2.5 text-right font-bold text-white">110</td>
+              </tr>
+              <tr className="border-t-2 border-slate-700 bg-slate-800/40">
+                <td className="px-4 py-2.5 font-semibold text-white">Sprint weekend total</td>
+                <td className="px-4 py-2.5 text-right">151</td>
+                <td className="px-4 py-2.5 text-right text-yellow-400">+21</td>
                 <td className="px-4 py-2.5 text-right font-bold text-red-400">172</td>
               </tr>
             </tbody>
@@ -284,9 +319,6 @@ function ScoringTable({
 }: {
   event: string;
   icon: string;
-  basePoints: number;
-  penaltyPerPlace: number;
-  podiumBonus: number;
   rows: { label: string; points: number }[];
 }) {
   return (

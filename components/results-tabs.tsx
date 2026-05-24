@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { LocalTime } from "@/components/local-time";
 import { LeaguePicks } from "@/components/league-picks";
 import type { Route } from "next";
+import { pointsForDiff } from "@/lib/scoring";
+import type { EventType } from "@/lib/types";
 
 type ResultRow = { driver_id: string; actual_position: number; driver_name: string; driver_team: string };
 type TabId = "quali" | "sprint" | "race";
@@ -47,12 +49,6 @@ function teamDot(team: string) {
 
 function shortGP(name: string) {
   return name.replace(" Grand Prix", "").replace("Grand Prix", "").trim();
-}
-
-// Points per pick based on scoring config
-function ptsForDiff(et: TabId, diff: number): number {
-  if (et === "quali") return Math.max(0, 12 - diff * 4);
-  return Math.max(0, (et === "sprint" ? 10 : 12) - diff * 2);
 }
 
 export function ResultsTabs({
@@ -100,7 +96,7 @@ export function ResultsTabs({
     .map(([driverId, predictedPos]) => {
       const actual = actualPos.get(driverId) ?? null;
       const diff = actual !== null ? Math.abs(predictedPos - actual) : null;
-      const pts = diff !== null ? ptsForDiff(activeTab, diff) : null;
+      const pts = diff !== null ? pointsForDiff(activeTab as EventType, diff, hasSprint) : null;
       const driver = actualDriver.get(driverId);
       const driverName = driverNameById.get(driverId) ?? driver?.driver_name ?? driverId;
       return { driverId, predictedPos, actual, diff, pts, driverName, driverTeam: driver?.driver_team ?? "" };

@@ -138,9 +138,20 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
     setSyncStatus("");
     setSyncError("");
     const res = await fetch(endpoint, { method: "POST" });
+    const json = await res.json().catch(() => ({}));
     setSyncLoading(null);
-    if (res.ok) setSyncStatus(`${label} complete`);
-    else setSyncError(`${label} failed`);
+    if (!res.ok) {
+      const detail = json.errors?.length ? json.errors.join("; ") : json.error;
+      setSyncError(detail ? `${label} failed: ${detail}` : `${label} failed`);
+      return;
+    }
+    if (label === "Recompute" && typeof json.sprintWeekendCount === "number") {
+      setSyncStatus(
+        `${label} complete — ${json.scoreRows} session scores, ${json.sprintWeekendCount} sprint weekend(s) in calendar`
+      );
+    } else {
+      setSyncStatus(`${label} complete`);
+    }
   }
 
   async function sendReminderNow() {

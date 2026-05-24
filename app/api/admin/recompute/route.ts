@@ -6,6 +6,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST() {
   await assertAdmin();
-  await recomputeAllScores();
-  return NextResponse.json({ ok: true });
+  const result = await recomputeAllScores();
+  if (result.errors.length) {
+    return NextResponse.json({ ok: false, ...result }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, ...result });
 }

@@ -1,24 +1,35 @@
 import { scoreEvent } from "@/lib/scoring";
+import { isSprintWeekend } from "@/lib/race-weekend";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { EventType } from "@/lib/types";
 
 const events: EventType[] = ["quali", "sprint", "race"];
 
-export async function recomputeAllScores() {
-  const supabase = getSupabaseAdmin();
+export type RecomputeResult = {
+  scoreRows: number;
+  weekendRows: number;
+  sprintWeekendCount: number;
+  errors: string[];
+};
 
-  // Fetch everything in 3 bulk queries instead of N×M×3 individual ones
+export async function recomputeAllScores(): Promise<RecomputeResult> {
+  const supabase = getSupabaseAdmin();
+  const errors: string[] = [];
+
   const [{ data: races }, { data: users }, { data: allPreds }, { data: allResults }] =
     await Promise.all([
-      supabase.from("race_weekends").select("id,has_sprint"),
+      supabase.from("race_weekends").select("id,has_sprint,sprint_start"),
       supabase.from("users").select("id"),
       supabase.from("predictions").select("user_id,race_id,event_type,driver_id,predicted_position"),
       supabase.from("results").select("race_id,event_type,driver_id,actual_position")
     ]);
 
-  if (!races?.length || !users?.length) return;
+  if (!races?.length || !users?.length) {
+    return { scoreRows: 0, weekendRows: 0, sprintWeekendCount: 0, errors: ["No races or users in database"] };
+  }
 
-  // Index predictions: raceId -> eventType -> userId -> picks[]
+  const sprintWeekendCount = races.filter(isSprintWeekend).length;
+
   type Pred = { driver_id: string; predicted_position: number };
   const predIndex = new Map<string, Map<string, Map<string, Pred[]>>>();
   for (const p of allPreds ?? []) {
@@ -30,7 +41,6 @@ export async function recomputeAllScores() {
     byUser.get(p.user_id)!.push({ driver_id: p.driver_id, predicted_position: p.predicted_position });
   }
 
-  // Index results: raceId -> eventType -> results[]
   type Res = { driver_id: string; actual_position: number };
   const resultIndex = new Map<string, Map<string, Res[]>>();
   for (const r of allResults ?? []) {
@@ -40,7 +50,6 @@ export async function recomputeAllScores() {
     byEvent.get(r.event_type)!.push({ driver_id: r.driver_id, actual_position: r.actual_position });
   }
 
-  // Compute all scores in memory
   const scoreRows: {
     user_id: string; race_id: string; event_type: string;
     points: number; total_error: number; exact_matches: number;
@@ -52,17 +61,19 @@ export async function recomputeAllScores() {
   }[] = [];
 
   for (const race of races) {
+    const sprintWeekend = isSprintWeekend(race);
+
     for (const user of users) {
       let weekendPoints = 0, weekendError = 0, weekendExact = 0;
 
       for (const eventType of events) {
-        if (eventType === "sprint" && !race.has_sprint) continue;
+        if (eventType === "sprint" && !sprintWeekend) continue;
 
         const preds = predIndex.get(race.id)?.get(eventType)?.get(user.id) ?? [];
         const results = resultIndex.get(race.id)?.get(eventType) ?? [];
         if (!preds.length || !results.length) continue;
 
-        const score = scoreEvent(eventType, preds, results);
+        const score = scoreEvent(eventType, preds, results, sprintWeekend);
         weekendPoints += score.points;
         weekendError += score.totalError;
         weekendExact += score.exactMatches;
@@ -80,17 +91,23 @@ export async function recomputeAllScores() {
     }
   }
 
-  // Batch upsert — must specify conflict target since tables use identity PKs
   if (scoreRows.length) {
     const { error } = await supabase
       .from("scores")
       .upsert(scoreRows, { onConflict: "user_id,race_id,event_type" });
-    if (error) console.error("scores upsert error:", error.message);
+    if (error) errors.push(`scores upsert: ${error.message}`);
   }
   if (weekendRows.length) {
     const { error } = await supabase
       .from("weekend_scores")
       .upsert(weekendRows, { onConflict: "user_id,race_id" });
-    if (error) console.error("weekend_scores upsert error:", error.message);
+    if (error) errors.push(`weekend_scores upsert: ${error.message}`);
   }
+
+  return {
+    scoreRows: scoreRows.length,
+    weekendRows: weekendRows.length,
+    sprintWeekendCount,
+    errors
+  };
 }

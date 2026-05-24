@@ -2,11 +2,30 @@ import { DriverPrediction, DriverResult, EventType } from "@/lib/types";
 
 type Config = { max: number; penalty: number; podiumBonus: number; podiumSize: number };
 
-const config: Record<EventType, Config> = {
+// Normal weekend (quali + race, or sprint weekend before sprint session scoring applied per-event)
+const normalConfig: Record<EventType, Config> = {
   quali: { max: 12, penalty: 4, podiumBonus: 6, podiumSize: 3 },
   sprint: { max: 6, penalty: 1, podiumBonus: 5, podiumSize: 3 },
   race: { max: 12, penalty: 2, podiumBonus: 10, podiumSize: 3 }
 };
+
+// Sprint weekend — same 172 max as normal (151 pick base + 21 podium)
+// Race weighted highest; quali reduced more than race to fund sprint session.
+const sprintWeekendConfig: Record<EventType, Config> = {
+  quali: { max: 7, penalty: 2, podiumBonus: 6, podiumSize: 3 },
+  sprint: { max: 4, penalty: 1, podiumBonus: 5, podiumSize: 3 },
+  race: { max: 10, penalty: 2, podiumBonus: 10, podiumSize: 3 }
+};
+
+export function getEventConfig(eventType: EventType, hasSprint = false): Config {
+  return hasSprint ? sprintWeekendConfig[eventType] : normalConfig[eventType];
+}
+
+/** Points for a single pick given position error (UI display). */
+export function pointsForDiff(eventType: EventType, diff: number, hasSprint = false): number {
+  const { max, penalty } = getEventConfig(eventType, hasSprint);
+  return Math.max(0, max - diff * penalty);
+}
 
 export type EventScoreResult = {
   points: number;
@@ -20,9 +39,10 @@ const fallbackPos = 22; // 2026 season has 22 drivers
 export function scoreEvent(
   eventType: EventType,
   predictions: DriverPrediction[],
-  results: DriverResult[]
+  results: DriverResult[],
+  hasSprint = false
 ): EventScoreResult {
-  const cfg = config[eventType];
+  const cfg = getEventConfig(eventType, hasSprint);
   const resultMap = new Map(results.map((r) => [r.driver_id, r.actual_position]));
 
   let points = 0;
@@ -34,7 +54,7 @@ export function scoreEvent(
     const diff = Math.abs(p.predicted_position - actual);
     totalError += diff;
     if (diff === 0) exactMatches += 1;
-    points += Math.max(0, cfg.max - diff * cfg.penalty);
+    points += pointsForDiff(eventType, diff, hasSprint);
   }
 
   const podiumExact = [1, 2, 3].every((position) => {

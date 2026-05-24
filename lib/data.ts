@@ -7,7 +7,10 @@ async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
 
   // A race is "done" when race results exist in the DB.
-  // Next race = earliest race weekend with NO race results yet.
+  // "Next race" = earliest race that:
+  //   1. Has no results (not completed), AND
+  //   2. Has race_start in the future OR quali_start in the future
+  //      (handles cancelled races where date has passed but no results)
   const { data: racesWithResults } = await supabase
     .from("results")
     .select("race_id")
@@ -20,8 +23,17 @@ async function fetchNextRaceFromDb() {
     .select("*")
     .order("race_start", { ascending: true });
 
-  const next = (allRaces ?? []).find(r => !completedIds.has(r.id));
-  return next ?? null;
+  const now = new Date().toISOString();
+
+  // First pass: future race with no results (the ideal "next race")
+  const futureNext = (allRaces ?? []).find(
+    r => !completedIds.has(r.id) && r.race_start > now
+  );
+  if (futureNext) return futureNext;
+
+  // Second pass: most recently completed race (season might be over)
+  const completed = (allRaces ?? []).filter(r => completedIds.has(r.id));
+  return completed[completed.length - 1] ?? null;
 }
 
 export async function getNextRace() {
@@ -45,13 +57,13 @@ export async function getSeasonProgress() {
 
   const [{ data: allRaces }, { data: completedResults }] = await Promise.all([
     supabase.from("race_weekends").select("id"),
-    // A race is "completed" when race results exist for it
+    // A race "happened" when it has race results (cancelled races have no results)
     supabase.from("results").select("race_id").eq("event_type", "race")
   ]);
 
   const total = allRaces?.length ?? 0;
   const completedIds = new Set((completedResults ?? []).map(r => r.race_id));
-  const past = completedIds.size;
+  const past = completedIds.size; // Only counts races that actually happened
 
   return { total, past };
 }

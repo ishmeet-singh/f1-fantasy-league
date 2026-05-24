@@ -174,6 +174,20 @@ export default function BacklogPage() {
         />
 
         <BacklogItem
+          id="KI-03"
+          priority="P1"
+          title="Cancelled races (Bahrain R4, Saudi R5) break next race logic"
+          status="done"
+          addedBecause="Bahrain GP (April 12) and Saudi Arabian GP (April 19) were cancelled mid-season. The getNextRace() function found 'first race with no results' — since cancelled races have no results but their dates have passed, Bahrain showed as 'next race' on the dashboard instead of Miami GP (May 3)."
+          whatToDo={[
+            "Fixed: getNextRace() now requires race_start > now in addition to no results",
+            "Cancelled races (past date, no results) are correctly skipped",
+            "Season progress still shows 3/24 (only races that actually happened count)"
+          ]}
+          impact="Dashboard correctly shows Miami GP as next race."
+        />
+
+        <BacklogItem
           id="KI-02"
           priority="P2"
           title="Driver number 3 (Verstappen) shows as '#3' not full name"

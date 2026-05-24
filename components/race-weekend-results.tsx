@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { Route } from "next";
+import { isSprintWeekend } from "@/lib/race-weekend";
+import { pointsForDiff } from "@/lib/scoring";
+import type { EventType } from "@/lib/types";
 
 type TabId = "quali" | "sprint" | "race";
 type ResultRow = { driver_id: string; actual_position: number; driver_name: string; driver_team: string };
@@ -38,14 +41,9 @@ function shortGP(name: string) {
   return name.replace(" Grand Prix", "").replace("Grand Prix", "").trim();
 }
 
-function ptsForDiff(et: TabId, diff: number): number {
-  if (et === "quali") return Math.max(0, 12 - diff * 4);
-  return Math.max(0, (et === "sprint" ? 10 : 12) - diff * 2);
-}
-
 // Session card: shows my picks vs actual results for one event
 function SessionCard({
-  eventType, label, results, myPicks, myScore, sessionLocked, driverNames
+  eventType, label, results, myPicks, myScore, sessionLocked, driverNames, hasSprint
 }: {
   eventType: TabId; label: string;
   results: ResultRow[];
@@ -53,6 +51,7 @@ function SessionCard({
   myScore: { points: number; exact: number } | null;
   sessionLocked: boolean;
   driverNames: Map<string, { name: string; team: string }>;
+  hasSprint: boolean;
 }) {
   const [showFull, setShowFull] = useState(false);
 
@@ -66,7 +65,7 @@ function SessionCard({
     .map(([driverId, predictedPos]) => {
       const actual = actualPos.get(driverId) ?? null;
       const diff = actual !== null ? Math.abs(predictedPos - actual) : null;
-      const pts = diff !== null ? ptsForDiff(eventType, diff) : null;
+      const pts = diff !== null ? pointsForDiff(eventType as EventType, diff, hasSprint) : null;
       const fromMap = driverNames.get(driverId);
       const fromResults = actualDriver.get(driverId);
       const driverName = fromMap?.name || fromResults?.driver_name || `#${driverId}`;
@@ -318,13 +317,14 @@ function LeagueTable({
 export function RaceWeekendResults({
   races, selectedRace, resultsByEvent, myPicks, myScores, leaguePlayers, currentUserId
 }: Props) {
+  const sprintWeekend = isSprintWeekend(selectedRace);
   const router = useRouter();
   const pathname = usePathname();
   const now = new Date();
 
   const sessionLocked: Record<TabId, boolean> = {
     quali: new Date(selectedRace.quali_start) <= now || resultsByEvent.quali.length > 0,
-    sprint: selectedRace.has_sprint && selectedRace.sprint_start
+    sprint: sprintWeekend && selectedRace.sprint_start
       ? new Date(selectedRace.sprint_start) <= now || resultsByEvent.sprint.length > 0
       : false,
     race: new Date(selectedRace.race_start) <= now || resultsByEvent.race.length > 0,
@@ -388,6 +388,9 @@ export function RaceWeekendResults({
           <p className="text-sm text-slate-500 mt-0.5">
             {new Date(selectedRace.race_start).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
           </p>
+          {sprintWeekend && (
+            <p className="text-xs text-yellow-400/90 mt-1">Sprint weekend — balanced scoring (172 pt max)</p>
+          )}
         </div>
         {weekendTotal > 0 && (
           <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-3 text-center">
@@ -399,10 +402,10 @@ export function RaceWeekendResults({
       </div>
 
       {/* Session cards — sorted by session start time */}
-      <div className={`grid gap-4 ${selectedRace.has_sprint ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+      <div className={`grid gap-4 ${sprintWeekend ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         {[
           { eventType: "quali" as TabId, label: "Qualifying", iso: selectedRace.quali_start, show: true },
-          { eventType: "sprint" as TabId, label: "Sprint", iso: selectedRace.sprint_start ?? "", show: selectedRace.has_sprint && !!selectedRace.sprint_start },
+          { eventType: "sprint" as TabId, label: "Sprint", iso: selectedRace.sprint_start ?? "", show: sprintWeekend && !!selectedRace.sprint_start },
           { eventType: "race" as TabId, label: "Race", iso: selectedRace.race_start, show: true }
         ]
           .filter(s => s.show)
@@ -416,6 +419,7 @@ export function RaceWeekendResults({
               myScore={myScores[eventType]}
               sessionLocked={sessionLocked[eventType]}
               driverNames={driverNames}
+              hasSprint={sprintWeekend}
             />
           ))}
       </div>
@@ -424,7 +428,7 @@ export function RaceWeekendResults({
       <LeagueTable
         players={leaguePlayers}
         resultsByEvent={resultsByEvent}
-        hasSprint={selectedRace.has_sprint}
+        hasSprint={sprintWeekend}
         sessionLocked={sessionLocked}
         currentUserId={currentUserId}
       />
