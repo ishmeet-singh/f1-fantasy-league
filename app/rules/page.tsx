@@ -81,16 +81,15 @@ export default async function RulesPage() {
           </p>
         </div>
 
-        <div className="mt-4 rounded-lg border border-yellow-700/50 bg-yellow-950/20 p-4 text-sm">
+        <div className="mt-4 rounded-lg border border-yellow-700/50 bg-yellow-950/20 p-4 text-sm space-y-3">
           <p className="font-semibold text-yellow-300">Perfect podium bonus</p>
-          <p className="text-slate-300 mt-1 leading-relaxed">
-            If you get <strong className="text-white">P1, P2, and P3 exactly right</strong> (correct drivers in
-            correct order) in one session, you get an extra bonus on top of that session&apos;s pick points.
-            <strong className="text-yellow-300">+6</strong> for Qualifying and{" "}
-            <strong className="text-yellow-300">+10</strong> for Race — same on normal and sprint weekends (race is
-            worth more). Sprint weekends have <strong className="text-white">no</strong> podium bonus for the Sprint
-            session; those points stay on Race instead.
+          <p className="text-slate-300 leading-relaxed">
+            If you get <strong className="text-white">P1, P2, and P3 exactly right</strong> (correct drivers in correct
+            order) in a session, you earn a bonus on top of that session&apos;s pick points. Bonuses still add up to{" "}
+            <strong className="text-white">+16 per weekend</strong> on both weekend types — on sprint weekends the pool
+            is split across three sessions instead of two.
           </p>
+          <PodiumBonusTable />
         </div>
       </Section>
 
@@ -127,11 +126,10 @@ export default async function RulesPage() {
 
       <Section title="Sprint weekend scoring">
         <p className="text-slate-400 text-sm mb-4">
-          Three sessions: Qualifying + Sprint + Race. Qualifying uses the <strong className="text-slate-300">same</strong>{" "}
-          per-pick values as a normal weekend; Sprint and Race use lower caps so the extra session does not change the
-          weekend total. A perfect sprint weekend is also <strong className="text-slate-300">156 pick points + 16 podium
-          = 172</strong> — same as normal. Race earns the most overall (10×8 pick pts plus the +10 race podium, same as
-          a normal weekend).
+          Three sessions: Qualifying + Sprint + Race. Qualifying per-pick scoring is <strong className="text-slate-300">unchanged</strong>{" "}
+          from a normal weekend (12 pts max). Sprint and Race use lower per-pick caps so the extra session does not push
+          the weekend above <strong className="text-slate-300">172 points</strong>. Each session can earn a podium bonus;
+          Race gets the largest share (+8), matching the normal weekend&apos;s 2:1 race-to-quali podium ratio.
         </p>
         <div className="space-y-4">
           <SessionScoring
@@ -161,9 +159,9 @@ export default async function RulesPage() {
         </div>
         <WeekendMaxTable
           rows={[
-            { session: "Qualifying", base: 36, podium: 6, max: 42 },
-            { session: "Sprint", base: 40, podium: 0, max: 40 },
-            { session: "Race", base: 80, podium: 10, max: 90 }
+            { session: "Qualifying", base: 36, podium: 4, max: 40 },
+            { session: "Sprint", base: 40, podium: 4, max: 44 },
+            { session: "Race", base: 80, podium: 8, max: 88 }
           ]}
           total={{ base: 156, podium: 16, max: 172 }}
         />
@@ -183,6 +181,43 @@ export default async function RulesPage() {
           </li>
         </ul>
       </Section>
+    </div>
+  );
+}
+
+function PodiumBonusTable() {
+  return (
+    <div className="rounded-lg overflow-hidden border border-yellow-800/40">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-yellow-950/40 text-left text-xs text-slate-400 uppercase">
+            <th className="px-3 py-2">Weekend type</th>
+            <th className="px-3 py-2 text-right">Quali</th>
+            <th className="px-3 py-2 text-right">Sprint</th>
+            <th className="px-3 py-2 text-right">Race</th>
+            <th className="px-3 py-2 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody className="text-slate-300">
+          <tr className="border-t border-yellow-900/40">
+            <td className="px-3 py-2">Normal</td>
+            <td className="px-3 py-2 text-right font-mono text-yellow-300">+6</td>
+            <td className="px-3 py-2 text-right text-slate-600">—</td>
+            <td className="px-3 py-2 text-right font-mono text-yellow-300">+10</td>
+            <td className="px-3 py-2 text-right font-semibold text-white">+16</td>
+          </tr>
+          <tr className="border-t border-yellow-900/40 bg-yellow-950/20">
+            <td className="px-3 py-2">Sprint</td>
+            <td className="px-3 py-2 text-right font-mono text-yellow-300">+4</td>
+            <td className="px-3 py-2 text-right font-mono text-yellow-300">+4</td>
+            <td className="px-3 py-2 text-right font-mono text-yellow-300">+8</td>
+            <td className="px-3 py-2 text-right font-semibold text-white">+16</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="px-3 py-2 text-xs text-slate-500 border-t border-yellow-900/40">
+        Race ÷ Quali = 1.67× on normal weekends (+10 ÷ +6) and sprint weekends (+8 ÷ +4).
+      </p>
     </div>
   );
 }
