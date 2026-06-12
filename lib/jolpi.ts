@@ -139,6 +139,52 @@ export async function fetchAllJolpiSprintResults(year: number): Promise<BulkResu
   return fetchBulkResults(year, "sprint/", "SprintResults");
 }
 
+export type JolpiEventKind = "race" | "quali" | "sprint";
+
+const JOLPI_ROUND_ENDPOINT: Record<JolpiEventKind, { path: string; resultKey: keyof JolpiBulkRace }> = {
+  race: { path: "results", resultKey: "Results" },
+  quali: { path: "qualifying", resultKey: "QualifyingResults" },
+  sprint: { path: "sprint", resultKey: "SprintResults" },
+};
+
+function mapJolpiResultRows(rows: JolpiResultRow[]) {
+  return rows.map((r) => ({
+    driverId: r.Driver.driverId,
+    position: Number(r.position) || 20,
+    team: r.Constructor.name,
+  }));
+}
+
+/** Per-round fetch — Jolpi bulk endpoints often lag behind the latest race. */
+export async function fetchJolpiRoundResults(
+  year: number,
+  round: string,
+  eventKind: JolpiEventKind
+): Promise<{ driverId: string; position: number; team: string }[]> {
+  const { path, resultKey } = JOLPI_ROUND_ENDPOINT[eventKind];
+  try {
+    const data = await fetchJson<JolpiBulkResponse>(`/f1/${year}/${round}/${path}/`);
+    const race = data.MRData.RaceTable.Races[0];
+    const rows = (race?.[resultKey] as JolpiResultRow[] | undefined) ?? [];
+    return mapJolpiResultRows(rows);
+  } catch (err) {
+    console.warn(`fetchJolpiRoundResults(${year}/${round}/${eventKind}) failed:`, err);
+    return [];
+  }
+}
+
+/** Bulk map first; fall back to per-round when bulk omits a race (common for the latest GP). */
+export async function getJolpiResultsForRound(
+  year: number,
+  round: string,
+  eventKind: JolpiEventKind,
+  bulkMap: BulkResultsByRound
+): Promise<{ driverId: string; position: number; team: string }[]> {
+  const fromBulk = bulkMap.get(round);
+  if (fromBulk?.length) return fromBulk;
+  return fetchJolpiRoundResults(year, round, eventKind);
+}
+
 // Jolpi race IDs use the format "jolpi-{year}-{round}" to avoid collisions with OpenF1 meeting keys
 export function jolpiRaceId(year: number, round: string) {
   return `jolpi-${year}-${round}`;

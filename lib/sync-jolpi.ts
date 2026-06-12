@@ -7,6 +7,7 @@ import {
   fetchAllJolpiRaceResults,
   fetchAllJolpiQualiResults,
   fetchAllJolpiSprintResults,
+  getJolpiResultsForRound,
   jolpiRaceId
 } from "@/lib/jolpi";
 
@@ -142,14 +143,15 @@ export async function syncResultsJolpi() {
 
       const isOpenF1Race = !String(race.id).startsWith("jolpi-");
 
-      type EventPair = { eventType: "quali" | "sprint" | "race"; rows: { driverId: string; position: number; team: string }[] };
-      const events: EventPair[] = [
-        { eventType: "quali", rows: allQuali.get(round) ?? [] },
-        { eventType: "race", rows: allRace.get(round) ?? [] },
-        ...(race.has_sprint ? [{ eventType: "sprint" as const, rows: allSprint.get(round) ?? [] }] : [])
+      const eventTypes: ("quali" | "sprint" | "race")[] = [
+        "quali",
+        "race",
+        ...(race.has_sprint ? (["sprint"] as const) : []),
       ];
 
-      for (const { eventType, rows } of events) {
+      for (const eventType of eventTypes) {
+        const bulkMap = eventType === "quali" ? allQuali : eventType === "sprint" ? allSprint : allRace;
+        const rows = await getJolpiResultsForRound(year, round, eventType, bulkMap);
         if (!rows.length) continue;
         anyResults = true;
 
