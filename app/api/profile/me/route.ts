@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { getRequestUser } from "@/lib/request-user";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export async function GET() {
-  const supabase = createServerSupabase();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = getRequestUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const admin = getSupabaseAdmin();

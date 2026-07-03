@@ -9,7 +9,6 @@ export type RequestUser = { id: string; email: string };
 export function getRequestUser(): RequestUser | null {
   const h = headers();
   const id = h.get("x-user-id");
-  const email = h.get("x-user-email");
-  if (!id || !email) return null;
-  return { id, email };
+  if (!id) return null;
+  return { id, email: h.get("x-user-email") ?? "" };
 }

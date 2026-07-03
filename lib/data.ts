@@ -1,13 +1,11 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { bestNWeekendTotal, BEST_WEEKENDS_COUNT } from "@/lib/scoring";
 import { syncCalendar } from "@/lib/sync";
 import { fetchF1DriverStandings, type F1DriverStanding } from "@/lib/jolpi";
 import { computeSeasonProgress } from "@/lib/cancelled-races";
-import {
-  computeLeaderboard,
-  computeUserRank,
-  type WeekendScoreRow
-} from "@/lib/leaderboard-compute";
+import { computeLeaderboard, type WeekendScoreRow } from "@/lib/leaderboard-compute";
+import { getCachedWeekendScoreTotals } from "@/lib/cached-reference-data";
+import { buildPersonalStats } from "@/lib/personal-stats";
+import type { UserRow } from "@/lib/leaderboard-compute";
 
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
@@ -188,47 +186,19 @@ export type PersonalStats = {
 export async function getPersonalStats(userId: string): Promise<PersonalStats | null> {
   const supabase = getSupabaseAdmin();
 
-  const [myScoresRes, usersRes, weekendsRes] = await Promise.all([
+  const [myScoresRes, usersRes, scoreTotals] = await Promise.all([
     supabase
       .from("weekend_scores")
       .select("total_points,exact_matches,race_id,race_weekends(grand_prix,race_start)")
-      .eq("user_id", userId)
-      .order("race_weekends(race_start)", { ascending: false }),
+      .eq("user_id", userId),
     supabase.from("users").select("id,display_name,email"),
-    supabase
-      .from("weekend_scores")
-      .select("user_id,race_id,total_points,total_error,exact_matches")
+    getCachedWeekendScoreTotals()
   ]);
 
-  const myScores = myScoresRes.data;
-  if (!myScores?.length) return null;
-
-  const points = myScores.map((s) => s.total_points || 0);
-  const totalPoints = bestNWeekendTotal(points, BEST_WEEKENDS_COUNT);
-  const bestWeekend = Math.max(0, ...points);
-  const exactMatches = myScores.reduce((sum, s) => sum + (s.exact_matches || 0), 0);
-
-  const lastScoredRace = myScores.find((s) => (s.total_points || 0) > 0);
-  let lastRace: { name: string; points: number } | null = null;
-  if (lastScoredRace) {
-    const raceWeekend = lastScoredRace.race_weekends as { grand_prix: string } | { grand_prix: string }[] | null;
-    const raceName = Array.isArray(raceWeekend)
-      ? raceWeekend[0]?.grand_prix
-      : raceWeekend?.grand_prix || "";
-    lastRace = { name: raceName, points: lastScoredRace.total_points || 0 };
-  }
-
-  const leaderboard = computeLeaderboard(
-    usersRes.data ?? [],
-    (weekendsRes.data ?? []) as WeekendScoreRow[]
+  return buildPersonalStats(
+    userId,
+    myScoresRes.data ?? [],
+    (usersRes.data ?? []) as UserRow[],
+    scoreTotals
   );
-  const rank = computeUserRank(userId, leaderboard);
-
-  return {
-    rank,
-    totalPoints,
-    bestWeekend,
-    exactMatches,
-    lastRace
-  };
 }

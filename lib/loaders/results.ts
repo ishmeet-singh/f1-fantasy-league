@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getCachedDrivers, getCachedRaceWeekends } from "@/lib/cached-reference-data";
 import { resolveDriverDisplayName } from "@/lib/driver-crossref";
+import { distinctRaceIdsFromRaceResults } from "@/lib/races-with-results";
 
 type TabId = "quali" | "sprint" | "race";
 
@@ -23,20 +24,31 @@ export type ResultsPageData = {
   currentUserId: string | null;
 };
 
+export function selectResultsRace(
+  races: Awaited<ReturnType<typeof getCachedRaceWeekends>>,
+  raceIdsWithResults: Set<string>,
+  selectedRaceId?: string
+) {
+  const racesHavingResults = races.filter((r) => raceIdsWithResults.has(r.id));
+  const defaultRace = racesHavingResults[racesHavingResults.length - 1] ?? races[0];
+  return races.find((r) => r.id === selectedRaceId) ?? defaultRace;
+}
+
 export async function loadResultsPage(
   userId: string | null,
   selectedRaceId?: string
 ): Promise<ResultsPageData | null> {
   const supabase = getSupabaseAdmin();
-  const races = await getCachedRaceWeekends();
+
+  const [races, completedRes] = await Promise.all([
+    getCachedRaceWeekends(),
+    supabase.from("results").select("race_id").eq("event_type", "race")
+  ]);
+
   if (!races.length) return null;
 
-  const { data: racesWithResults } = await supabase.from("results").select("race_id");
-  const raceIdsWithResults = new Set((racesWithResults ?? []).map((r) => r.race_id));
-
-  const racesHavingResults = races.filter((r) => raceIdsWithResults.has(r.id));
-  const defaultRace = racesHavingResults[racesHavingResults.length - 1] ?? races[0];
-  const selectedRace = races.find((r) => r.id === selectedRaceId) ?? defaultRace;
+  const raceIdsWithResults = distinctRaceIdsFromRaceResults(completedRes.data ?? []);
+  const selectedRace = selectResultsRace(races, raceIdsWithResults, selectedRaceId);
 
   const [resultRows, allPickRows, allUsers, allScoreRows, drivers] = await Promise.all([
     supabase

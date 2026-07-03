@@ -1,10 +1,15 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/picks", "/results", "/profile", "/admin", "/rules"];
+const PROTECTED_PAGE_PREFIXES = ["/dashboard", "/picks", "/results", "/profile", "/admin", "/rules"];
+const PROTECTED_API_PREFIXES = ["/api/profile"];
 
-function isProtectedPath(pathname: string) {
-  return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+function isProtectedPage(pathname: string) {
+  return PROTECTED_PAGE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isProtectedApi(pathname: string) {
+  return PROTECTED_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 export async function middleware(request: NextRequest) {
@@ -39,10 +44,16 @@ export async function middleware(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
-  if (!user && isProtectedPath(request.nextUrl.pathname)) {
+  const pathname = request.nextUrl.pathname;
+
+  if (!user && isProtectedPage(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
+  }
+
+  if (!user && isProtectedApi(pathname)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   if (user) {
@@ -61,5 +72,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/picks/:path*", "/results/:path*", "/profile/:path*", "/admin/:path*", "/rules/:path*"]
+  matcher: [
+    "/dashboard/:path*",
+    "/picks/:path*",
+    "/results/:path*",
+    "/profile/:path*",
+    "/admin/:path*",
+    "/rules/:path*",
+    "/api/profile/:path*"
+  ]
 };

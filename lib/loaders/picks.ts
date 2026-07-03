@@ -18,34 +18,43 @@ export type PicksPageData = {
   }[];
 };
 
+const WINDOW_HOURS = 48;
+
+function picksOpenAt(r: RaceWeekendRow, now: Date): boolean {
+  const first = Math.min(
+    new Date(r.quali_start).getTime(),
+    r.has_sprint && r.sprint_start ? new Date(r.sprint_start).getTime() : Infinity
+  );
+  const openAt = new Date(first - WINDOW_HOURS * 60 * 60 * 1000);
+  return now >= openAt;
+}
+
+export function selectPicksRace(races: RaceWeekendRow[], selectedRaceId: string | undefined, now = new Date()) {
+  const windowOpenAndUpcoming = races.filter(
+    (r) => picksOpenAt(r, now) && new Date(r.race_start) > now
+  );
+  const upcomingRaces = races.filter((r) => new Date(r.race_start) > now);
+  const defaultRace = windowOpenAndUpcoming[0] ?? upcomingRaces[0] ?? races[0];
+  return races.find((r) => r.id === selectedRaceId) ?? defaultRace;
+}
+
 export async function loadPicksPage(
   userId: string,
   selectedRaceId?: string
 ): Promise<PicksPageData | null> {
   const supabase = getSupabaseAdmin();
-  const races = await getCachedRaceWeekends();
+
+  const [races, drivers, usersRes] = await Promise.all([
+    getCachedRaceWeekends(),
+    getCachedDrivers(),
+    supabase.from("users").select("id,display_name,email").order("created_at")
+  ]);
+
   if (!races.length) return null;
 
-  const now = new Date();
-  const WINDOW_HOURS = 48;
-  const picksOpenAt = (r: RaceWeekendRow) => {
-    const first = Math.min(
-      new Date(r.quali_start).getTime(),
-      r.has_sprint && r.sprint_start ? new Date(r.sprint_start).getTime() : Infinity
-    );
-    return new Date(first - WINDOW_HOURS * 60 * 60 * 1000);
-  };
+  const race = selectPicksRace(races, selectedRaceId);
 
-  const windowOpenAndUpcoming = races.filter(
-    (r) => now >= picksOpenAt(r) && new Date(r.race_start) > now
-  );
-  const upcomingRaces = races.filter((r) => new Date(r.race_start) > now);
-  const defaultRace = windowOpenAndUpcoming[0] ?? upcomingRaces[0] ?? races[0];
-  const race = races.find((r) => r.id === selectedRaceId) ?? defaultRace;
-
-  const [drivers, usersRes, picksRes, resultsRes] = await Promise.all([
-    getCachedDrivers(),
-    supabase.from("users").select("id,display_name,email").order("created_at"),
+  const [picksRes, resultsRes] = await Promise.all([
     supabase
       .from("predictions")
       .select("user_id,driver_id,predicted_position,event_type,drivers(name)")
