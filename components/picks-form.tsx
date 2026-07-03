@@ -12,6 +12,7 @@ import {
   useDraggable,
   type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent
 } from "@dnd-kit/core";
 import {
@@ -52,6 +53,29 @@ const TEAM_COLORS: Record<string, string> = {
 
 function slotId(index: number) {
   return `slot-${index}`;
+}
+
+/** Drop targets are 20% tighter than the visible row — brief edge hovers don't count. */
+const DROP_HIT_SCALE = 0.8;
+/** Finger must rest on a slot this long before release will commit a drop. */
+const DROP_STABLE_MS = 280;
+
+function scaleRectFromCenter(
+  rect: { top: number; left: number; width: number; height: number; bottom: number; right: number },
+  scale: number
+) {
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const w = rect.width * scale;
+  const h = rect.height * scale;
+  return {
+    top: cy - h / 2,
+    bottom: cy + h / 2,
+    left: cx - w / 2,
+    right: cx + w / 2,
+    width: w,
+    height: h
+  };
 }
 
 function teamDot(team: string) {
@@ -265,8 +289,18 @@ export function PicksForm({
   const [errorMsg, setErrorMsg] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const skipPoolTapRef = useRef(false);
+  const dropHoverRef = useRef<{ id: string; since: number } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdown = useCountdown(deadline, locked);
+
+  useEffect(() => {
+    if (!activeId) return;
+    const prev = document.body.style.touchAction;
+    document.body.style.touchAction = "none";
+    return () => {
+      document.body.style.touchAction = prev;
+    };
+  }, [activeId]);
 
   const driverById = new Map(drivers.map((d) => [d.id, d]));
   const filledCount = slots.filter(Boolean).length;
@@ -283,7 +317,11 @@ export function PicksForm({
   );
 
   const collisionDetection: CollisionDetection = useCallback((args) => {
-    const hits = closestCenter(args);
+    const scaledRects = new Map(args.droppableRects);
+    for (const [id, rect] of args.droppableRects) {
+      scaledRects.set(id, scaleRectFromCenter(rect, DROP_HIT_SCALE));
+    }
+    const hits = closestCenter({ ...args, droppableRects: scaledRects });
     if (!args.active) return hits;
     return hits.filter((hit) => hit.id !== args.active.id);
   }, []);
@@ -301,19 +339,46 @@ export function PicksForm({
   const activePoolDriver = isPoolDrag ? (driverById.get(activeId!.slice(5)) ?? null) : null;
 
   function handleDragStart(event: DragStartEvent) {
+    dropHoverRef.current = null;
     setActiveId(String(event.active.id));
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const id = event.over ? String(event.over.id) : null;
+    if (!id) {
+      dropHoverRef.current = null;
+      return;
+    }
+    const now = Date.now();
+    if (dropHoverRef.current?.id !== id) {
+      dropHoverRef.current = { id, since: now };
+    }
+  }
+
+  function clearDropHover() {
+    dropHoverRef.current = null;
+  }
+
+  function committedDropTarget(over: DragEndEvent["over"]): string | null {
+    if (!over) return null;
+    const id = String(over.id);
+    const tracked = dropHoverRef.current;
+    if (!tracked || tracked.id !== id) return null;
+    if (Date.now() - tracked.since < DROP_STABLE_MS) return null;
+    return id;
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveId(null);
 
-    if (!over) return;
+    const overIdStr = committedDropTarget(over);
+    clearDropHover();
 
-    const activeIdStr = String(active.id);
-    const overIdStr = String(over.id);
+    if (!overIdStr) return;
     if (!overIdStr.startsWith("slot-")) return;
 
+    const activeIdStr = String(active.id);
     const to = parseInt(overIdStr.slice(5), 10);
     if (Number.isNaN(to)) return;
 
@@ -343,6 +408,7 @@ export function PicksForm({
 
   function handleDragCancel() {
     setActiveId(null);
+    clearDropHover();
   }
 
   function tapAddToPool(driverId: string) {
@@ -481,13 +547,14 @@ export function PicksForm({
         sensors={sensors}
         collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
             <p className="text-xs" style={{ color: F1.carbonLight }}>
-              {filledCount}/{size} picked · press and drag a pick to reorder
+              {filledCount}/{size} picked · press and drag · hold ~0.3s on a slot to drop
             </p>
             {slots.map((driverId, i) => {
               const driver = driverId ? (driverById.get(driverId) ?? null) : null;
@@ -508,7 +575,7 @@ export function PicksForm({
             Driver pool
           </p>
           <p className="text-xs" style={{ color: F1.carbonLight }}>
-            {pool.length > 0 ? "Tap to add · or press and drag to a slot" : "All drivers picked"}
+            {pool.length > 0 ? "Tap to add · drag to a slot and pause briefly before releasing" : "All drivers picked"}
           </p>
           <div className="flex flex-wrap gap-2">
             {pool.map((d) => (
