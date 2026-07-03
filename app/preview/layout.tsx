@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 /** Full-screen shell so previews never inherit the dark production chrome. */
 export default function PreviewLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden bg-[#f4f5f7] text-zinc-900 antialiased">
+    <div className="fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden bg-[#F8F8F8] text-zinc-900 antialiased">
       {children}
     </div>
   );

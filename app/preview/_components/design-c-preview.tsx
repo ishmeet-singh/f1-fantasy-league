@@ -26,17 +26,13 @@ export function DesignCPreview() {
       <PreviewScreenNav design="Grid Chicane" screen={screen} onScreen={setScreen} accent="f1" />
 
       {screen === "dashboard" ? (
-        <div className="mx-auto max-w-lg">
-          {/* F1 header — carbon + red accent bar */}
+        <div className="mx-auto max-w-lg space-y-4 px-4 pt-4">
+          {/* F1 header — contained card, no overlap */}
           <div
-            className="relative overflow-hidden rounded-b-3xl px-4 pt-6 pb-10 text-white shadow-lg"
-            style={{ background: F1.carbon }}
+            className="relative overflow-hidden rounded-2xl px-4 py-5 text-white"
+            style={{ background: F1.carbon, boxShadow: "0 4px 24px rgba(21,21,30,0.12)" }}
           >
-            <div className="absolute left-0 top-0 h-1 w-full" style={{ background: F1.red }} />
-            <div
-              className="absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-10"
-              style={{ background: F1.red }}
-            />
+            <div className="absolute left-0 top-0 h-1 w-full rounded-t-2xl" style={{ background: F1.red }} />
             <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: F1.red }}>
               F1 Friends League
             </p>
@@ -57,12 +53,11 @@ export function DesignCPreview() {
             </div>
           </div>
 
-          <div className="-mt-5 px-4">
-            {/* Leaderboard */}
-            <section
-              className="rounded-2xl bg-white p-4 shadow-md"
-              style={{ boxShadow: "0 4px 24px rgba(21,21,30,0.08)" }}
-            >
+          {/* Leaderboard */}
+          <section
+            className="rounded-2xl bg-white p-4"
+            style={{ boxShadow: "0 4px 24px rgba(21,21,30,0.08)" }}
+          >
               <div className="mb-4 flex items-start gap-2">
                 <div className="mt-1 h-4 w-1 shrink-0 rounded-full" style={{ background: F1.red }} />
                 <div>
@@ -192,22 +187,22 @@ export function DesignCPreview() {
               </ul>
             </section>
 
-            {/* Chart */}
-            <section
-              className="mt-5 rounded-2xl bg-white p-4"
-              style={{ boxShadow: "0 4px 24px rgba(21,21,30,0.08)" }}
-            >
+          {/* Chart */}
+          <section
+            className="rounded-2xl bg-white p-4"
+            style={{ boxShadow: "0 4px 24px rgba(21,21,30,0.08)" }}
+          >
               <h2 className="text-base font-bold" style={{ color: F1.carbon }}>
                 Progression
               </h2>
               <MiniLineChart races={CHART_RACES} lines={CHART_LINES_F1} className="mt-3" />
             </section>
 
-            {/* Next race */}
-            <section
-              className="mt-5 overflow-hidden rounded-2xl"
-              style={{ boxShadow: "0 4px 24px rgba(21,21,30,0.08)" }}
-            >
+          {/* Next race */}
+          <section
+            className="overflow-hidden rounded-2xl"
+            style={{ boxShadow: "0 4px 24px rgba(21,21,30,0.08)" }}
+          >
               <div className="px-4 py-2.5" style={{ background: F1.red }}>
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-white">
                   Next race
@@ -247,7 +242,6 @@ export function DesignCPreview() {
                 )}
               </div>
             </section>
-          </div>
         </div>
       ) : (
         <PicksScreenC />
