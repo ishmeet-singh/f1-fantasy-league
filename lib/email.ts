@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { EMAIL, renderEmailLayout } from "@/lib/email-brand";
 
 type EventType = "quali" | "sprint" | "race";
 
@@ -55,55 +56,55 @@ export async function sendReminderEmail({
   const baseUrl = appUrl || process.env.NEXT_PUBLIC_APP_URL || "https://f1-fantasy-league-lilac.vercel.app";
 
   const subject = isUrgent
-    ? `⏰ Last chance! ${raceName} ${eventLabel} picks lock in ${timeLabel}`
-    : `🏎️ ${raceName} ${eventLabel} predictions — ${timeLabel} to go`;
+    ? `Last chance — ${raceName} ${eventLabel} picks lock in ${timeLabel}`
+    : `${raceName} ${eventLabel} predictions — ${timeLabel} to go`;
 
   const linkNote = isMagicLink
-    ? `This link signs you in automatically — no password needed. It expires after one use.`
-    : `You'll be asked to sign in if you're not already logged in.`;
+    ? "This link signs you in automatically — no password needed. It expires after one use."
+    : "You'll be asked to sign in if you're not already logged in.";
 
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-</head>
-<body style="background:#020617;color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:0;">
-  <div style="max-width:480px;margin:0 auto;padding:32px 24px;">
-    <div style="text-align:center;margin-bottom:32px;">
-      <span style="font-size:32px;">🏎️</span>
-      <h1 style="color:#f8fafc;font-size:20px;font-weight:700;margin:12px 0 4px;">F1 Fantasy League</h1>
-    </div>
+  const urgentBanner = isUrgent
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">
+        <tr>
+          <td style="padding:12px 14px;border-radius:12px;background:${EMAIL.urgentBg};border:1px solid ${EMAIL.urgentBorder};font-size:13px;font-weight:600;color:${EMAIL.urgentText};">
+            Picks lock in ${timeLabel} — submit before the session starts.
+          </td>
+        </tr>
+      </table>`
+    : "";
 
-    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:24px;">
-      <p style="color:#94a3b8;font-size:14px;margin:0 0 8px;">Hey ${name || "there"},</p>
-      <h2 style="color:#f8fafc;font-size:18px;font-weight:600;margin:0 0 16px;line-height:1.4;">
-        ${raceName} ${eventLabel} picks lock in <span style="color:#ef4444;">${timeLabel}</span>
-      </h2>
-      <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;">
-        You haven't submitted your ${eventLabel.toLowerCase()} predictions yet. Click below to lock in your picks before the deadline.
-      </p>
-      <a href="${picksLink}"
-        style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">
-        Submit my ${eventLabel} picks →
-      </a>
-      <p style="color:#475569;font-size:12px;margin:20px 0 0;">
-        ${linkNote}
-      </p>
-      ${isMagicLink ? `
-      <p style="color:#334155;font-size:11px;margin:12px 0 0;">
-        Link not working? <a href="${baseUrl}/picks" style="color:#64748b;text-decoration:underline;">Go to the app directly →</a>
-      </p>` : ""}
-    </div>
-
-    <p style="color:#334155;font-size:12px;text-align:center;margin-top:24px;">
-      F1 Fantasy League · You're receiving this because you're a registered player.
+  const bodyHtml = `
+    ${urgentBanner}
+    <p style="margin:0 0 8px;font-size:14px;color:${EMAIL.carbonLight};">Hey ${name || "there"},</p>
+    <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;line-height:1.35;color:${EMAIL.carbon};">
+      ${raceName} ${eventLabel}
+    </h1>
+    <p style="margin:0 0 8px;font-size:15px;line-height:1.5;color:${EMAIL.carbon};">
+      Your ${eventLabel.toLowerCase()} predictions aren't in yet. You have
+      <strong style="color:${EMAIL.red};">${timeLabel}</strong> before picks lock.
     </p>
-  </div>
-</body>
-</html>
-  `.trim();
+    <p style="margin:0;font-size:14px;line-height:1.5;color:${EMAIL.carbonLight};">
+      Tap the button below to open the app and lock in your picks before the deadline.
+    </p>
+    <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:${EMAIL.carbonLight};">
+      ${linkNote}
+    </p>
+    ${
+      isMagicLink
+        ? `<p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:${EMAIL.carbonLight};">
+            Link not working?
+            <a href="${baseUrl}/picks" style="color:${EMAIL.red};text-decoration:underline;">Go to the app directly</a>
+          </p>`
+        : ""
+    }`;
+
+  const html = renderEmailLayout({
+    appUrl: baseUrl,
+    preheader: `${raceName} ${eventLabel} picks lock in ${timeLabel}`,
+    bodyHtml,
+    ctaLabel: `Submit my ${eventLabel} picks →`,
+    ctaHref: picksLink
+  });
 
   const transporter = getTransporter();
 

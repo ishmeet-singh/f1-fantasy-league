@@ -95,7 +95,11 @@ The hosted OpenF1 API may return **401** with a message like *“Live F1 session
 3. Add redirect URLs:
    - `http://localhost:3000/auth/callback`
    - `https://<your-vercel-domain>/auth/callback`
-4. Run `supabase/schema.sql`.
+4. In **Authentication → Email Templates**, paste the HTML from:
+   - `supabase/templates/magic-link.html` → **Magic Link** (login emails)
+   - `supabase/templates/confirm-signup.html` → **Confirm signup** (if used)
+   Set **Site URL** in Supabase to your app URL so the F1 logo loads in emails.
+5. Run `supabase/schema.sql`.
    - Includes RLS policies.
    - Includes `auth.users -> public.users` trigger.
 
