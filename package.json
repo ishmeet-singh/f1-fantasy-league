@@ -9,6 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "measure:cold-load": "node scripts/measure-cold-load.mjs",
     "diagnose:network": "node scripts/diagnose-network.mjs",
     "setup:npm": "bash scripts/setup-npm.sh",
     "ci:verify": "npm run diagnose:network && npm run build"
@@ -21,6 +22,7 @@
     "@supabase/supabase-js": "^2.49.1",
     "@types/nodemailer": "^7.0.11",
     "clsx": "^2.1.1",
+    "jose": "^6.2.3",
     "next": "14.2.18",
     "nodemailer": "^8.0.1",
     "react": "18.3.1",

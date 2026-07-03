@@ -1,5 +1,5 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { authenticateMiddlewareRequest } from "@/lib/auth/middleware-auth";
 
 const PROTECTED_PAGE_PREFIXES = ["/dashboard", "/picks", "/results", "/profile", "/admin", "/rules"];
 const PROTECTED_API_PREFIXES = ["/api/profile"];
@@ -14,37 +14,9 @@ function isProtectedApi(pathname: string) {
 
 export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
-
-  let supabaseResponse = NextResponse.next({
-    request: { headers: requestHeaders }
-  });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request: { headers: requestHeaders }
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        }
-      }
-    }
-  );
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
   const pathname = request.nextUrl.pathname;
+
+  const { user, supabaseResponse } = await authenticateMiddlewareRequest(request, requestHeaders);
 
   if (!user && isProtectedPage(pathname)) {
     const url = request.nextUrl.clone();
@@ -58,7 +30,7 @@ export async function middleware(request: NextRequest) {
 
   if (user) {
     requestHeaders.set("x-user-id", user.id);
-    requestHeaders.set("x-user-email", user.email ?? "");
+    requestHeaders.set("x-user-email", user.email);
     const forwarded = NextResponse.next({
       request: { headers: requestHeaders }
     });
