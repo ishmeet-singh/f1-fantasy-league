@@ -199,15 +199,7 @@ function PoolChip({
   return (
     <span
       ref={setNodeRef}
-      role="button"
-      tabIndex={disabled ? -1 : 0}
       onClick={!isDragging ? onTap : undefined}
-      onKeyDown={(e) => {
-        if (!disabled && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onTap();
-        }
-      }}
       {...listeners}
       {...attributes}
       className="inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
