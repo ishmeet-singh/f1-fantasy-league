@@ -118,24 +118,23 @@ function FilledSlot({
         boxShadow: isOver ? `0 0 0 2px ${F1.red}33` : undefined
       }}
     >
-      <span
+      <div
         {...listeners}
         {...attributes}
-        className="cursor-grab touch-none px-1 text-lg leading-none active:cursor-grabbing"
-        style={{ color: F1.carbonLight }}
+        className="flex min-w-0 flex-1 cursor-grab items-center gap-3 active:cursor-grabbing"
       >
-        ⠿
-      </span>
-      {posBadge(slotIdx)}
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        {teamDot(driver.team)}
-        <span className="truncate font-semibold" style={{ color: F1.carbon }}>
-          {driver.name}
-        </span>
+        {posBadge(slotIdx)}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {teamDot(driver.team)}
+          <span className="truncate font-semibold" style={{ color: F1.carbon }}>
+            {driver.name}
+          </span>
+        </div>
       </div>
       <button
         type="button"
         onClick={onRemove}
+        onPointerDown={(e) => e.stopPropagation()}
         className="shrink-0 px-2 py-1 text-sm"
         style={{ color: F1.carbonLight }}
       >
@@ -278,7 +277,7 @@ export function PicksForm({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
   );
 
   const isPoolDrag = activeId?.startsWith("pool-");
@@ -465,7 +464,7 @@ export function PicksForm({
       >
         <div className="space-y-2">
           <p className="text-xs" style={{ color: F1.carbonLight }}>
-            {filledCount}/{size} picked · hold ⠿ to reorder · hold chip to drag to slot
+            {filledCount}/{size} picked · hold a pick to reorder
           </p>
           {slots.map((driverId, i) => {
             const driver = driverId ? (driverById.get(driverId) ?? null) : null;
