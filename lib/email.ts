@@ -73,7 +73,7 @@ export async function sendReminderEmail({
   <div style="max-width:480px;margin:0 auto;padding:32px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
       <span style="font-size:32px;">🏎️</span>
-      <h1 style="color:#f8fafc;font-size:20px;font-weight:700;margin:12px 0 4px;">F1 Friends League</h1>
+      <h1 style="color:#f8fafc;font-size:20px;font-weight:700;margin:12px 0 4px;">F1 Fantasy League</h1>
     </div>
 
     <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:24px;">
@@ -98,7 +98,7 @@ export async function sendReminderEmail({
     </div>
 
     <p style="color:#334155;font-size:12px;text-align:center;margin-top:24px;">
-      F1 Friends League · You're receiving this because you're a registered player.
+      F1 Fantasy League · You're receiving this because you're a registered player.
     </p>
   </div>
 </body>
@@ -108,7 +108,7 @@ export async function sendReminderEmail({
   const transporter = getTransporter();
 
   const info = await transporter.sendMail({
-    from: `F1 Friends League <${fromAddress}>`,
+    from: `F1 Fantasy League <${fromAddress}>`,
     to,
     subject,
     html

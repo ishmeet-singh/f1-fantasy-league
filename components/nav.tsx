@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignOutButton } from "@/components/sign-out-button";
+import { AppBrand } from "@/components/f1-logo";
 import type { Route } from "next";
 
 type NavProps = {
@@ -24,8 +25,8 @@ export function Nav({ email, isAdmin }: NavProps) {
   return (
     <header className="border-b border-slate-800 sticky top-0 z-10 bg-slate-950/90 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-5xl items-center gap-1 px-4 py-0 text-sm">
-        <Link href="/dashboard" className="mr-3 py-4 font-bold text-white text-base tracking-tight flex-shrink-0">
-          F1 <span className="text-red-500">League</span>
+        <Link href="/dashboard" className="mr-3 py-3 flex-shrink-0">
+          <AppBrand theme="dark" logoHeight={20} />
         </Link>
 
         <div className="flex items-center gap-1 overflow-x-auto flex-1">

@@ -22,7 +22,7 @@ export default async function RulesPage() {
     <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold">How to Play</h1>
-        <p className="text-slate-400 mt-1 text-sm">Rules and scoring for F1 Friends League</p>
+        <p className="text-slate-400 mt-1 text-sm">Rules and scoring for F1 Fantasy League</p>
       </div>
 
       <Section title="Overview">

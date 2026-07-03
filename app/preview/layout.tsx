@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "UI Preview — F1 Friends League",
+  title: "UI Preview — F1 Fantasy League",
   robots: { index: false, follow: false }
 };
 

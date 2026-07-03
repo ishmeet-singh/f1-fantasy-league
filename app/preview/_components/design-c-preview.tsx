@@ -10,6 +10,7 @@ import {
   STANDINGS_SUBTITLE
 } from "../_data/sample";
 import { F1 } from "../_data/f1-theme";
+import { AppBrand } from "@/components/f1-logo";
 import { MiniLineChart, PreviewScreenNav, usePreviewScreen } from "./preview-shared";
 
 const CHART_LINES_F1 = [
@@ -33,10 +34,8 @@ export function DesignCPreview() {
             style={{ background: F1.carbon, boxShadow: "0 4px 24px rgba(21,21,30,0.12)" }}
           >
             <div className="absolute left-0 top-0 h-1 w-full rounded-t-2xl" style={{ background: F1.red }} />
-            <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: F1.red }}>
-              F1 Friends League
-            </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Dashboard</h1>
+            <AppBrand theme="dark" logoHeight={28} />
+            <h1 className="mt-3 text-xl font-bold tracking-tight">Dashboard</h1>
             <div className="mt-4 flex items-center gap-3">
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
                 <div
