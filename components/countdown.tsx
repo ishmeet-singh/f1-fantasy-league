@@ -25,7 +25,7 @@ export function Countdown({
 }: {
   target: string;
   label?: string;
-  variant?: "dark" | "chicane";
+  variant?: "dark" | "chicane" | "banner";
 }) {
   const [parts, setParts] = useState(() => calcParts(target));
 
@@ -42,7 +42,7 @@ export function Countdown({
     );
   }
 
-  if (variant === "chicane") {
+  if (variant === "chicane" || variant === "banner") {
     const text =
       parts.d > 0
         ? `${parts.d}d ${pad(parts.h)}h ${pad(parts.m)}m`
@@ -50,10 +50,13 @@ export function Countdown({
 
     return (
       <div>
-        <p className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
+        <p
+          className="text-xs font-bold uppercase tracking-wide"
+          style={{ color: variant === "banner" ? "rgba(255,255,255,0.6)" : F1.carbonLight }}
+        >
           {label}
         </p>
-        <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight" style={{ color: F1.red }}>
+        <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight sm:text-3xl" style={{ color: F1.red }}>
           {text}
         </p>
       </div>

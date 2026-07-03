@@ -80,9 +80,6 @@ export function LeaderboardFull({
                     </span>
                   )}
                 </p>
-                <p className="text-xs" style={{ color: F1.carbonLight }}>
-                  {entry.exact} exact
-                </p>
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold tabular-nums" style={{ color: F1.carbon }}>

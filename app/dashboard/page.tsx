@@ -3,12 +3,12 @@ import { Suspense } from "react";
 import { getRequestUser } from "@/lib/request-user";
 import { loadDashboardPage } from "@/lib/loaders/dashboard";
 import { formatSeasonStandingsSubtitle } from "@/lib/season-standings";
+import { computeUserRank } from "@/lib/leaderboard-compute";
 import { Countdown } from "@/components/countdown";
 import { LocalTime } from "@/components/local-time";
 import { LeaderboardFull } from "@/components/leaderboard-full";
 import { FantasyChart } from "@/components/fantasy-chart";
 import { DashboardF1Standings, F1StandingsSkeleton } from "@/components/dashboard-f1-standings";
-import { AppBrand } from "@/components/f1-logo";
 import { F1 } from "@/lib/f1-theme";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,9 @@ export default async function DashboardPage() {
     history,
     myNextPicks
   } = await loadDashboardPage(user?.id);
+
+  const myEntry = user?.id ? leaderboard.find((e) => e.id === user.id) : null;
+  const myRank = user?.id ? computeUserRank(user.id, leaderboard) : null;
 
   const totalPicksSubmitted = myNextPicks.length;
   const WINDOW_HOURS = 48;
@@ -62,19 +65,59 @@ export default async function DashboardPage() {
       ].sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
     : [];
 
+  const rankColor =
+    myRank !== null && myRank <= 3 ? F1.podium[myRank - 1] : F1.white;
+
   return (
     <>
-      {/* Header card */}
+      {/* Hero banner: rank, points, next session countdown */}
       <div
         className="relative overflow-hidden rounded-2xl px-4 py-5 text-white"
         style={{ background: F1.carbon, boxShadow: F1.headerShadow }}
       >
         <div className="absolute left-0 top-0 h-1 w-full rounded-t-2xl" style={{ background: F1.red }} />
-        <AppBrand theme="dark" logoHeight={32} />
-        <h1 className="mt-3 text-xl font-bold tracking-tight">Dashboard</h1>
+
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            {myEntry && myRank !== null ? (
+              <>
+                <p className="text-xs font-bold uppercase tracking-wider text-white/60">Your standings</p>
+                <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                  <span
+                    className="text-4xl font-bold tabular-nums tracking-tight sm:text-5xl"
+                    style={{ color: rankColor }}
+                  >
+                    P{myRank}
+                  </span>
+                  <span className="text-3xl font-bold tabular-nums text-white/90 sm:text-4xl">
+                    {myEntry.score} pts
+                  </span>
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-bold uppercase tracking-wider text-white/60">Your standings</p>
+                <p className="mt-1 text-xl font-semibold text-white/90">No scores yet</p>
+              </>
+            )}
+          </div>
+
+          {nextRace && upcomingSession && (
+            <div className="shrink-0 sm:text-right">
+              <p className="mb-1 truncate text-xs font-medium text-white/50">{nextRace.grand_prix}</p>
+              <Countdown
+                target={upcomingSession.iso}
+                label={`${upcomingSession.label} in`}
+                variant="banner"
+              />
+            </div>
+          )}
+        </div>
+
         {season.total > 0 && (
-          <div className="mt-4 flex items-center gap-3">
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+          <div className="mt-5 flex items-center gap-3">
+            <span className="shrink-0 text-xs font-medium text-white/50">Season</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full rounded-full transition-all"
                 style={{
@@ -95,7 +138,7 @@ export default async function DashboardPage() {
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm"
           style={{ boxShadow: F1.cardShadow }}
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="shrink-0 text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
               Last race
             </span>
@@ -106,7 +149,7 @@ export default async function DashboardPage() {
               <>
                 <span style={{ color: F1.gridLine }}>·</span>
                 <span className="font-bold" style={{ color: F1.red }}>
-                  {lastRace.userScore} pts
+                  Your {lastRace.userScore} pts
                 </span>
               </>
             )}
