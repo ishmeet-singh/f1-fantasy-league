@@ -1,40 +1,22 @@
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendReminderEmail } from "@/lib/email";
+import {
+  REMINDER_INTERVALS_MINUTES,
+  REMINDER_LOOKAHEAD_MS,
+  selectRacesInReminderWindow,
+  shouldSendReminderNow,
+  type ReminderRaceWeekend
+} from "@/lib/reminder-races";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// Minutes before each session start at which we send a reminder
-const REMINDER_INTERVALS_MINUTES = [48 * 60, 24 * 60, 12 * 60, 6 * 60, 3 * 60, 60, 5];
-
-// How long after a threshold we'll still send the reminder.
-// 90 min covers typical GitHub Actions delays without catching multiple intervals at once.
-const MATCH_WINDOW_MINUTES = 90;
-
 type EventType = "quali" | "sprint" | "race";
-
-interface RaceWeekend {
-  id: string;
-  grand_prix: string;
-  quali_start: string;
-  sprint_start: string | null;
-  race_start: string;
-  has_sprint: boolean;
-}
 
 function intervalLabel(minutes: number): string {
   if (minutes >= 60) return `${minutes / 60}h`;
   return `${minutes}min`;
-}
-
-function shouldSendNow(sessionStart: string, intervalMinutes: number): boolean {
-  const sessionTime = new Date(sessionStart).getTime();
-  const targetTime = sessionTime - intervalMinutes * 60 * 1000;
-  const now = Date.now();
-  const diffMinutes = (now - targetTime) / 60000;
-  // Fire if we're within the match window past the target time
-  return diffMinutes >= 0 && diffMinutes < MATCH_WINDOW_MINUTES;
 }
 
 export async function GET(request: Request) {
@@ -47,22 +29,13 @@ export async function GET(request: Request) {
   // Fetch upcoming races, then keep any with a session in the reminder window.
   // Must check sprint_start too — on sprint weekends sprint is *before* quali, so
   // anchoring only on quali_start misses every early sprint reminder interval.
-  const lookaheadMs = (48 * 60 + 60) * 60 * 1000;
   const nowMs = Date.now();
-  const cutoffMs = nowMs + lookaheadMs;
   const { data: upcoming } = await supabase
     .from("race_weekends")
     .select("id,grand_prix,quali_start,sprint_start,race_start,has_sprint")
     .gte("race_start", new Date(nowMs).toISOString());
 
-  const races = (upcoming ?? []).filter((race) => {
-    const sessions = [race.quali_start, race.race_start];
-    if (race.has_sprint && race.sprint_start) sessions.push(race.sprint_start);
-    return sessions.some((start) => {
-      const t = new Date(start).getTime();
-      return t > nowMs && t <= cutoffMs;
-    });
-  });
+  const races = selectRacesInReminderWindow(upcoming ?? [], nowMs, REMINDER_LOOKAHEAD_MS);
 
   if (!races.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
 
@@ -72,7 +45,7 @@ export async function GET(request: Request) {
   let sent = 0;
   let skipped = 0;
 
-  for (const race of races as RaceWeekend[]) {
+  for (const race of races as ReminderRaceWeekend[]) {
     const sessions: { eventType: EventType; start: string }[] = [
       { eventType: "quali", start: race.quali_start },
       ...(race.has_sprint && race.sprint_start
@@ -86,7 +59,7 @@ export async function GET(request: Request) {
       if (new Date(start) <= new Date()) continue;
 
       for (const intervalMins of REMINDER_INTERVALS_MINUTES) {
-        if (!shouldSendNow(start, intervalMins)) continue;
+        if (!shouldSendReminderNow(start, intervalMins, nowMs)) continue;
 
         const label = intervalLabel(intervalMins);
 

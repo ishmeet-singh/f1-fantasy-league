@@ -10,6 +10,8 @@ import {
   getJolpiResultsForRound,
   jolpiRaceId
 } from "@/lib/jolpi";
+import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
+import { sessionsReadyToSync } from "@/lib/sync-session-gate";
 
 function isoDateTime(date: string, time: string) {
   // date = "2026-03-08", time = "04:00:00Z"
@@ -54,14 +56,24 @@ export async function syncCalendarJolpi(year = new Date().getUTCFullYear()) {
     const sprintStart = race.Sprint
       ? isoDateTime(race.Sprint.date, race.Sprint.time)
       : null;
+    const weekend = applyOfficialSprintWeekend2026(
+      {
+        grand_prix: race.raceName,
+        quali_start: qualiStart,
+        sprint_start: sprintStart,
+        race_start: raceStart,
+        has_sprint: Boolean(sprintStart)
+      },
+      year
+    );
     return {
       id: jolpiRaceId(year, race.round),
-      grand_prix: race.raceName,
+      grand_prix: weekend.grand_prix,
       race_date: raceStart,
-      quali_start: qualiStart,
-      sprint_start: sprintStart,
-      race_start: raceStart,
-      has_sprint: Boolean(sprintStart)
+      quali_start: weekend.quali_start,
+      sprint_start: weekend.sprint_start,
+      race_start: weekend.race_start,
+      has_sprint: weekend.has_sprint
     };
   });
 
@@ -76,14 +88,14 @@ export async function syncCalendarJolpi(year = new Date().getUTCFullYear()) {
 export async function syncResultsJolpi() {
   const supabase = getSupabaseAdmin();
   const now = Date.now();
-  const windowStart = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const windowStart = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
   const windowEnd   = new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString();
 
   // Find ALL races in the sync window — both Jolpi-ID and OpenF1-ID races.
   // OpenF1-ID races (e.g. id="1280") fall back to Jolpi when OpenF1 is rate-limited.
   const { data: races } = await supabase
     .from("race_weekends")
-    .select("id,has_sprint,race_start")
+    .select("id,has_sprint,race_start,quali_start,sprint_start")
     .gte("race_start", windowStart)
     .lte("race_start", windowEnd);
 
@@ -143,13 +155,16 @@ export async function syncResultsJolpi() {
 
       const isOpenF1Race = !String(race.id).startsWith("jolpi-");
 
-      const eventTypes: ("quali" | "sprint" | "race")[] = [
-        "quali",
-        "race",
-        ...(race.has_sprint ? (["sprint"] as const) : []),
-      ];
+      const { data: existingResults } = await supabase
+        .from("results")
+        .select("event_type")
+        .eq("race_id", race.id);
+      const alreadySynced = new Set((existingResults ?? []).map((r) => r.event_type));
 
-      for (const eventType of eventTypes) {
+      const eventsToSync = sessionsReadyToSync(race, now, alreadySynced);
+      if (!eventsToSync.length) continue;
+
+      for (const { eventType } of eventsToSync) {
         const bulkMap = eventType === "quali" ? allQuali : eventType === "sprint" ? allSprint : allRace;
         const rows = await getJolpiResultsForRound(year, round, eventType, bulkMap);
         if (!rows.length) continue;

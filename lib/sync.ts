@@ -12,6 +12,9 @@ import {
   getJolpiResultsForRound,
 } from "@/lib/jolpi";
 import { applyScheduleOverridesAfterCalendarSync } from "@/lib/schedule-overrides";
+import { mergeDriverUpsert } from "@/lib/driver-sync";
+import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
+import { sessionsReadyToSync } from "@/lib/sync-session-gate";
 
 function findSessionStart(sessions: { session_name: string; date_start: string }[], names: string[]) {
   const found = sessions.find((session) => names.includes(session.session_name));
@@ -29,13 +32,19 @@ async function syncCalendarOpenF1(year: number) {
   ]);
 
   const drivers = allDrivers.filter(d => d.full_name && String(d.full_name).trim() !== "");
+  const { data: existingDrivers } = await supabaseAdmin.from("drivers").select("id,name,team");
+  const existingById = new Map((existingDrivers ?? []).map((d) => [d.id, d]));
+
   for (const d of drivers) {
     if (!d.full_name || String(d.full_name).trim() === "") continue;
-    await supabaseAdmin.from("drivers").upsert({
+    const incoming = {
       id: String(d.driver_number),
       name: d.full_name,
       team: d.team_name || "Unknown"
-    });
+    };
+    const merged = mergeDriverUpsert(incoming, existingById.get(incoming.id));
+    await supabaseAdmin.from("drivers").upsert(merged);
+    existingById.set(merged.id, merged);
   }
 
   // Races confirmed cancelled that OpenF1/Jolpi are slow to reflect.
@@ -84,14 +93,26 @@ async function syncCalendarOpenF1(year: number) {
     const qualiStart = findSessionStart(sessions, ["Qualifying"]) ?? raceStart;
     const sprintStart = findSessionStart(sessions, ["Sprint"]);
 
+    const year = new Date(raceStart).getUTCFullYear();
+    const weekendRow = applyOfficialSprintWeekend2026(
+      {
+        grand_prix: meeting.meeting_name,
+        quali_start: qualiStart,
+        sprint_start: sprintStart,
+        race_start: raceStart,
+        has_sprint: Boolean(sprintStart)
+      },
+      year
+    );
+
     await supabaseAdmin.from("race_weekends").upsert({
       id: String(meeting.meeting_key),
-      grand_prix: meeting.meeting_name,
+      grand_prix: weekendRow.grand_prix,
       race_date: meeting.date_start,
-      quali_start: qualiStart,
-      sprint_start: sprintStart,
-      race_start: raceStart,
-      has_sprint: Boolean(sprintStart)
+      quali_start: weekendRow.quali_start,
+      sprint_start: weekendRow.sprint_start,
+      race_start: weekendRow.race_start,
+      has_sprint: weekendRow.has_sprint
     });
   }
 }
@@ -121,16 +142,16 @@ async function syncResultsOpenF1() {
 
   // Window: races whose weekend has started (quali is typically 2 days before race)
   // or will start within 3 days (so we catch qualifying before race_start passes).
-  // Lower bound: 7 days ago (don't re-sync old completed races).
+  // Lower bound: 14 days ago (covers post-race penalty changes).
   // At most 2 races in window at any point in the season.
-  const windowStart = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const windowStart = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
   const windowEnd   = new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: races } = await supabaseAdmin
     .from("race_weekends")
     .select("id,has_sprint,race_start,quali_start,sprint_start")
     .not("id", "like", "jolpi-%")
-    .gte("race_start", windowStart)   // not older than 7 days
+    .gte("race_start", windowStart)   // not older than 14 days
     .lte("race_start", windowEnd);    // race starts within 3 days (quali already happening)
 
   if (!races?.length) {
@@ -163,21 +184,10 @@ async function syncResultsOpenF1() {
       .eq("race_id", race.id);
     const alreadySynced = new Set((existingResults ?? []).map(r => r.event_type));
 
-    // Retry any session that has started but still has no results in the DB (within the 7-day window).
+    // Retry any session that has started but still has no results in the DB (within the 14-day window).
     const nowMs = Date.now();
 
-    const eventsToSync: { eventType: EventType; sessionStart: string }[] = [];
-    if (race.quali_start && new Date(race.quali_start).getTime() <= nowMs && !alreadySynced.has("quali")) {
-      eventsToSync.push({ eventType: "quali", sessionStart: race.quali_start });
-    }
-    if (race.has_sprint && race.sprint_start
-        && new Date(race.sprint_start).getTime() <= nowMs
-        && !alreadySynced.has("sprint")) {
-      eventsToSync.push({ eventType: "sprint", sessionStart: race.sprint_start });
-    }
-    if (new Date(race.race_start).getTime() <= nowMs && !alreadySynced.has("race")) {
-      eventsToSync.push({ eventType: "race", sessionStart: race.race_start });
-    }
+    const eventsToSync = sessionsReadyToSync(race, nowMs, alreadySynced);
 
     if (!eventsToSync.length) {
       console.log(`[${race.id}] All sessions already synced — skipping`);

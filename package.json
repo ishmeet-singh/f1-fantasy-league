@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "diagnose:network": "node scripts/diagnose-network.mjs",
     "setup:npm": "bash scripts/setup-npm.sh",
     "ci:verify": "npm run diagnose:network && npm run build"
@@ -37,6 +38,7 @@
     "eslint-config-next": "14.2.18",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
   }
 }
