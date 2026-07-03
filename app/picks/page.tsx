@@ -1,11 +1,13 @@
 import { PicksForm } from "@/components/picks-form";
 import { PicksRaceSelector } from "@/components/picks-race-selector";
 import { LeaguePicks } from "@/components/league-picks";
+import { Countdown } from "@/components/countdown";
 import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
 import { getRequestUser } from "@/lib/request-user";
 import { loadPicksPage, buildLeaguePicksForEvent } from "@/lib/loaders/picks";
 import { syncCalendar } from "@/lib/sync";
+import { F1 } from "@/lib/f1-theme";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,12 @@ function formatCountdown(ms: number): string {
   return `${mins}m`;
 }
 
+type EventType = "quali" | "sprint" | "race";
+
+function pickCount(rows: { event_type: string }[], eventType: EventType, required: number) {
+  return rows.filter((p) => p.event_type === eventType).length >= required;
+}
+
 export default async function PicksPage({
   searchParams
 }: {
@@ -50,10 +58,9 @@ export default async function PicksPage({
 
   if (!data) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">Picks</h1>
-        <div className="card text-slate-400">No races scheduled yet.</div>
-      </div>
+      <section className="rounded-2xl bg-white p-6 text-center" style={{ boxShadow: F1.cardShadow, color: F1.carbonLight }}>
+        No races scheduled yet.
+      </section>
     );
   }
 
@@ -62,13 +69,13 @@ export default async function PicksPage({
 
   const eventsWithResults = new Set(existingResults.map((r) => r.event_type));
 
-  function resultsForEvent(eventType: "quali" | "sprint" | "race") {
+  function resultsForEvent(eventType: EventType) {
     return existingResults
       .filter((r) => r.event_type === eventType)
       .map((r) => ({ driverId: r.driver_id, actualPos: r.actual_position }));
   }
 
-  function picksForEvent(eventType: "quali" | "sprint" | "race") {
+  function picksForEvent(eventType: EventType) {
     return Object.fromEntries(
       pickRows
         .filter((p) => p.event_type === eventType)
@@ -89,6 +96,38 @@ export default async function PicksPage({
     : true;
   const raceLocked = new Date(race.race_start) <= now || eventsWithResults.has("race");
 
+  const sessions = [
+    { eventType: "quali" as const, label: "Quali", iso: race.quali_start, size: 3, locked: qualiLocked, show: true },
+    {
+      eventType: "sprint" as const,
+      label: "Sprint",
+      iso: race.sprint_start ?? "",
+      size: 10,
+      locked: sprintLocked,
+      show: race.has_sprint && !!race.sprint_start
+    },
+    { eventType: "race" as const, label: "Race", iso: race.race_start, size: 10, locked: raceLocked, show: true }
+  ]
+    .filter((s) => s.show)
+    .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime());
+
+  const upcomingSession = sessions.find((s) => new Date(s.iso) > now) ?? sessions[sessions.length - 1];
+
+  const statusParts = sessions.map((s) => {
+    const saved = pickCount(pickRows, s.eventType, s.eventType === "quali" ? 3 : 10);
+    if (s.locked) return saved ? `${s.label} ✓` : `${s.label} missed`;
+    if (!sessionWindowOpen(s.iso) && !s.locked) return `${s.label} soon`;
+    return saved ? `${s.label} ✓` : `${s.label} open`;
+  });
+
+  const allSaved = sessions.every((s) => {
+    const required = s.eventType === "quali" ? 3 : 10;
+    return s.locked ? pickCount(pickRows, s.eventType, required) : true;
+  });
+  const anyOpen = sessions.some(
+    (s) => !s.locked && sessionWindowOpen(s.iso) && !pickCount(pickRows, s.eventType, s.eventType === "quali" ? 3 : 10)
+  );
+
   const raceItems = races.map((r, i) => ({
     id: r.id,
     grand_prix: r.grand_prix,
@@ -98,94 +137,130 @@ export default async function PicksPage({
   }));
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Picks</h1>
+    <>
+      {/* Hero */}
+      <div
+        className="relative overflow-hidden rounded-2xl px-4 py-5 text-white"
+        style={{ background: F1.carbon, boxShadow: F1.headerShadow }}
+      >
+        <div className="absolute left-0 top-0 h-1 w-full rounded-t-2xl" style={{ background: F1.red }} />
+        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: F1.red }}>
+          {race.grand_prix}
+        </p>
+        <h1 className="mt-1 text-xl font-bold tracking-tight">Your picks</h1>
 
-      <PicksRaceSelector races={raceItems} selectedRaceId={race.id} />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold">{race.grand_prix}</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Race · <LocalTime iso={race.race_start} opts={SESSION_OPTS} />
-          </p>
-        </div>
-        {!isOpen && (
-          <div className="text-right">
-            <p className="text-xs text-slate-500">Picks open in</p>
-            <p className="text-lg font-bold text-white">{formatCountdown(msUntilOpen)}</p>
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            {!isOpen ? (
+              <>
+                <p className="text-xs font-bold uppercase tracking-wide text-white/60">Picks open in</p>
+                <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight" style={{ color: F1.red }}>
+                  {formatCountdown(msUntilOpen)}
+                </p>
+              </>
+            ) : upcomingSession && !upcomingSession.locked ? (
+              <Countdown
+                target={upcomingSession.iso}
+                label={`${upcomingSession.label === "Quali" ? "Qualifying" : upcomingSession.label} locks in`}
+                variant="banner"
+              />
+            ) : (
+              <p className="text-sm text-white/70">All sessions locked for this weekend</p>
+            )}
           </div>
-        )}
+          <div className="sm:text-right">
+            <span
+              className="inline-block rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide"
+              style={{
+                background: !isOpen ? "rgba(255,255,255,0.1)" : anyOpen ? F1.red : allSaved ? "#166534" : F1.red,
+                color: F1.white
+              }}
+            >
+              {!isOpen ? "Not open yet" : anyOpen ? "Action needed" : allSaved ? "All submitted" : "Partially saved"}
+            </span>
+            <p className="mt-2 text-xs text-white/50">{statusParts.join(" · ")}</p>
+          </div>
+        </div>
       </div>
 
+      {/* Race selector */}
+      <section className="rounded-2xl bg-white p-4" style={{ boxShadow: F1.cardShadow }}>
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+          Select race
+        </p>
+        <PicksRaceSelector races={raceItems} selectedRaceId={race.id} />
+      </section>
+
       {!isOpen ? (
-        <div className="card space-y-3">
-          <p className="text-slate-400 text-sm">Picks open 48 hours before the first session.</p>
-          <div className="text-sm text-slate-500 space-y-2">
-            {[
-              { label: "Qualifying", iso: race.quali_start },
-              ...(race.has_sprint && race.sprint_start ? [{ label: "Sprint", iso: race.sprint_start }] : []),
-              { label: "Race", iso: race.race_start }
-            ]
-              .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
-              .map(({ label, iso }) => (
-                <div key={label} className="flex justify-between">
-                  <span className="text-slate-400">{label}</span>
-                  <span><LocalTime iso={iso} opts={SESSION_OPTS} /></span>
-                </div>
-              ))}
+        <section className="rounded-2xl bg-white p-4" style={{ boxShadow: F1.cardShadow }}>
+          <p className="text-sm" style={{ color: F1.carbonLight }}>
+            Picks open 48 hours before the first session.
+          </p>
+          <div className="mt-3 space-y-2 text-sm">
+            {sessions.map(({ label, iso }) => (
+              <div key={label} className="flex justify-between gap-2">
+                <span style={{ color: F1.carbonMid }}>{label === "Quali" ? "Qualifying" : label}</span>
+                <span style={{ color: F1.carbon }}>
+                  <LocalTime iso={iso} opts={SESSION_OPTS} />
+                </span>
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
       ) : (
         <div className="space-y-4">
-          {[
-            { eventType: "quali" as const, iso: race.quali_start, size: 3, locked: qualiLocked, show: true },
-            { eventType: "sprint" as const, iso: race.sprint_start ?? "", size: 10, locked: sprintLocked, show: race.has_sprint && !!race.sprint_start },
-            { eventType: "race" as const, iso: race.race_start, size: 10, locked: raceLocked, show: true }
-          ]
-            .filter((s) => s.show)
-            .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
-            .map(({ eventType, iso, size, locked }) => {
-              const windowOpen = sessionWindowOpen(iso);
-              const label = eventType === "quali" ? "Qualifying" : eventType === "sprint" ? "Sprint" : "Race";
+          {sessions.map(({ eventType, iso, size, locked }) => {
+            const windowOpen = sessionWindowOpen(iso);
+            const label = eventType === "quali" ? "Qualifying" : eventType === "sprint" ? "Sprint" : "Race";
 
-              if (!windowOpen && !locked) {
-                const msLeft = new Date(iso).getTime() - WINDOW_HOURS * 60 * 60 * 1000 - now.getTime();
-                return (
-                  <div key={eventType} className="card space-y-1">
-                    <p className="text-sm font-medium text-slate-300">{label}</p>
-                    <p className="text-xs text-slate-500">
-                      Picks open in <span className="text-white font-semibold">{formatCountdown(msLeft)}</span>
-                      {" · "}<LocalTime iso={iso} opts={SESSION_OPTS} />
-                    </p>
-                  </div>
-                );
-              }
-
+            if (!windowOpen && !locked) {
+              const msLeft = new Date(iso).getTime() - WINDOW_HOURS * 60 * 60 * 1000 - now.getTime();
               return (
-                <div key={eventType}>
-                  <PicksForm
-                    drivers={drivers}
-                    raceId={race.id}
-                    eventType={eventType}
-                    size={size}
-                    locked={locked}
-                    deadline={iso}
-                    initial={picksForEvent(eventType)}
-                  />
-                  {locked && (
-                    <div className="mt-2">
-                      <LeaguePicks
-                        players={buildLeaguePicksForEvent(eventType, user.id, allUsers, allPickRows)}
-                        results={resultsForEvent(eventType)}
-                      />
-                    </div>
-                  )}
-                </div>
+                <section
+                  key={eventType}
+                  className="rounded-2xl bg-white p-4"
+                  style={{ boxShadow: F1.cardShadow }}
+                >
+                  <h3 className="font-bold" style={{ color: F1.carbon }}>
+                    {label}
+                  </h3>
+                  <p className="mt-1 text-sm" style={{ color: F1.carbonLight }}>
+                    Picks open in{" "}
+                    <span className="font-semibold" style={{ color: F1.carbon }}>
+                      {formatCountdown(msLeft)}
+                    </span>
+                    {" · "}
+                    <LocalTime iso={iso} opts={SESSION_OPTS} />
+                  </p>
+                </section>
               );
-            })}
+            }
+
+            return (
+              <div key={eventType}>
+                <PicksForm
+                  drivers={drivers}
+                  raceId={race.id}
+                  eventType={eventType}
+                  size={size}
+                  locked={locked}
+                  deadline={iso}
+                  initial={picksForEvent(eventType)}
+                />
+                {locked && (
+                  <div className="mt-2">
+                    <LeaguePicks
+                      variant="chicane"
+                      players={buildLeaguePicksForEvent(eventType, user.id, allUsers, allPickRows)}
+                      results={resultsForEvent(eventType)}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
-    </div>
+    </>
   );
 }

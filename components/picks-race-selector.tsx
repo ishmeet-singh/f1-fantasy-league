@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
+import { F1 } from "@/lib/f1-theme";
 import type { Route } from "next";
 
 type RaceItem = {
@@ -11,7 +12,7 @@ type RaceItem = {
   isRaceDone: boolean;
 };
 
-function shortGP(name: string): string {
+function shortGP(name: string) {
   return name.replace(" Grand Prix", "").replace("Grand Prix", "").trim();
 }
 
@@ -30,29 +31,30 @@ export function PicksRaceSelector({
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">
+    <div className="flex gap-2 overflow-x-auto pb-1">
       {races.map((r) => {
         const selected = r.id === selectedRaceId;
+        const open = r.isWindowOpen && !r.isRaceDone;
         return (
           <button
             key={r.id}
+            type="button"
             onClick={() => select(r.id)}
-            className={`shrink-0 flex flex-col items-center px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
+            className="shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition active:opacity-80"
+            style={
               selected
-                ? "bg-red-600 border-red-500 text-white"
-                : r.isWindowOpen && !r.isRaceDone
-                ? "bg-emerald-900/30 border-emerald-800/60 text-emerald-300 hover:border-emerald-700"
-                : r.isRaceDone
-                ? "bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-700"
-                : "bg-slate-900/50 border-slate-800/50 text-slate-600 hover:border-slate-700"
-            }`}
+                ? { background: F1.red, borderColor: F1.red, color: F1.white }
+                : open
+                  ? { background: F1.white, borderColor: F1.red, color: F1.carbon }
+                  : r.isRaceDone
+                    ? { background: "#EEE", borderColor: F1.gridLine, color: F1.carbonLight }
+                    : { background: F1.white, borderColor: F1.gridLine, color: F1.carbonMid }
+            }
           >
-            <span className="text-[10px] opacity-60">R{r.round}</span>
-            <span className="max-w-[72px] text-center leading-tight">
-              {shortGP(r.grand_prix)}
-            </span>
-            {r.isWindowOpen && !r.isRaceDone && !selected && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1" />
+            <span className="block text-[10px] font-bold opacity-70">R{r.round}</span>
+            <span className="block max-w-[72px] text-center leading-tight">{shortGP(r.grand_prix)}</span>
+            {open && !selected && (
+              <span className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full" style={{ background: F1.red }} />
             )}
           </button>
         );
