@@ -70,7 +70,7 @@ export default async function DashboardPage() {
         style={{ background: F1.carbon, boxShadow: F1.headerShadow }}
       >
         <div className="absolute left-0 top-0 h-1 w-full rounded-t-2xl" style={{ background: F1.red }} />
-        <AppBrand theme="dark" logoHeight={28} />
+        <AppBrand theme="dark" logoHeight={32} />
         <h1 className="mt-3 text-xl font-bold tracking-tight">Dashboard</h1>
         {season.total > 0 && (
           <div className="mt-4 flex items-center gap-3">

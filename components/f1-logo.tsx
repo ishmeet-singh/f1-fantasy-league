@@ -6,21 +6,21 @@ type F1LogoProps = {
   className?: string;
   /** Height in px; width scales from asset aspect ratio */
   height?: number;
-  /** Kept for API compat — asset uses blend mode on all backgrounds */
   theme?: "light" | "dark";
 };
 
-/** Official F1 wordmark (user-provided asset). */
-export function F1Logo({ className, height = 22 }: F1LogoProps) {
+/** Official F1 wordmark — transparent PNG derived from user-provided asset. */
+export function F1Logo({ className, height = 22, theme = "light" }: F1LogoProps) {
   const width = Math.round(height * LOGO_ASPECT);
+  const src = theme === "dark" ? "/f1-logo-white.png" : "/f1-logo-dark.png";
 
   return (
     <Image
-      src="/f1-logo.png"
+      src={src}
       alt="F1"
       width={width}
       height={height}
-      className={`shrink-0 object-contain object-left mix-blend-lighten${className ? ` ${className}` : ""}`}
+      className={`shrink-0 object-contain object-left${className ? ` ${className}` : ""}`}
     />
   );
 }
