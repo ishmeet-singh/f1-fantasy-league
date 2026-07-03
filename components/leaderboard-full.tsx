@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { LeaderboardEntry, PointsHistoryEntry } from "@/lib/data";
 import { F1 } from "@/lib/f1-theme";
 import { raceShortCode } from "@/lib/race-short-code";
@@ -14,20 +14,22 @@ export function LeaderboardFull({
   history: PointsHistoryEntry[];
   currentUserId: string | null;
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(currentUserId ? [currentUserId] : [])
-  );
+  const [openById, setOpenById] = useState<Record<string, boolean>>(() => {
+    if (!currentUserId) return {};
+    const onBoard = leaderboard.some((e) => e.id === currentUserId);
+    return onBoard ? { [currentUserId]: true } : {};
+  });
 
   const historyByUser = new Map(history.map((h) => [h.userId, h]));
 
-  function toggle(id: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+  const toggle = useCallback((id: string) => {
+    setOpenById((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id];
+      else next[id] = true;
       return next;
     });
-  }
+  }, []);
 
   if (!leaderboard.length) {
     return (
@@ -43,29 +45,22 @@ export function LeaderboardFull({
         const isMe = entry.id === currentUserId;
         const playerHistory = historyByUser.get(entry.id);
         const hasRaces = Boolean(playerHistory?.races.length);
-        const open = expanded.has(entry.id);
+        const open = Boolean(openById[entry.id]);
 
         return (
           <li key={entry.id}>
-            <div
-              role={hasRaces ? "button" : undefined}
-              tabIndex={hasRaces ? 0 : undefined}
+            <button
+              type="button"
+              disabled={!hasRaces}
               onClick={hasRaces ? () => toggle(entry.id) : undefined}
-              onKeyDown={
-                hasRaces
-                  ? (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggle(entry.id);
-                      }
-                    }
-                  : undefined
-              }
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${hasRaces ? "cursor-pointer" : ""}`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-opacity ${
+                hasRaces ? "cursor-pointer active:opacity-80" : "cursor-default"
+              }`}
               style={{
                 background: isMe ? F1.redLight : F1.offWhite,
                 boxShadow: isMe ? `inset 0 0 0 2px ${F1.red}` : undefined
               }}
+              aria-expanded={hasRaces ? open : undefined}
             >
               <span
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -101,17 +96,18 @@ export function LeaderboardFull({
                 </p>
               </div>
               {hasRaces && (
-                <span className="shrink-0 text-xs" style={{ color: F1.carbonLight }}>
+                <span className="shrink-0 px-1 text-xs" style={{ color: F1.carbonLight }} aria-hidden>
                   {open ? "▲" : "▼"}
                 </span>
               )}
-            </div>
+            </button>
 
             {open && playerHistory && hasRaces && (
               <WeekendTiles
                 entry={entry}
                 races={playerHistory.races}
                 isMe={isMe}
+                onClose={() => toggle(entry.id)}
               />
             )}
           </li>
@@ -124,33 +120,44 @@ export function LeaderboardFull({
 function WeekendTiles({
   entry,
   races,
-  isMe
+  isMe,
+  onClose
 }: {
   entry: LeaderboardEntry;
   races: PointsHistoryEntry["races"];
   isMe: boolean;
+  onClose: () => void;
 }) {
   return (
     <div
       className="mt-3 rounded-xl p-3"
       style={{
         background: F1.offWhite,
-        border: `1px solid ${F1.gridLine}`,
-        marginLeft: isMe ? 0 : undefined
+        border: `1px solid ${F1.gridLine}`
       }}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
           {isMe ? "Your weekends" : `${entry.name}'s weekends`}
         </p>
-        {entry.racesCounting > 0 && (
-          <span
-            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
-            style={{ background: F1.carbon }}
+        <div className="flex shrink-0 items-center gap-2">
+          {entry.racesCounting > 0 && (
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+              style={{ background: F1.carbon }}
+            >
+              {entry.racesCounting} counting
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide"
+            style={{ color: F1.carbonMid, background: F1.white, border: `1px solid ${F1.gridLine}` }}
           >
-            {entry.racesCounting} counting
-          </span>
-        )}
+            Close
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
         {races.map((r) => (
