@@ -1,10 +1,8 @@
-import { createServerSupabase } from "@/lib/supabase-server";
 import {
   BEST_WEEKENDS_COUNT,
   getEventConfig,
   pickScoreRows
 } from "@/lib/scoring";
-import { redirect } from "next/navigation";
 
 const normalQuali = getEventConfig("quali", false);
 const normalRace = getEventConfig("race", false);
@@ -13,12 +11,6 @@ const sprintSession = getEventConfig("sprint", true);
 const sprintRace = getEventConfig("race", true);
 
 export default async function RulesPage() {
-  const supabase = createServerSupabase();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/");
-
   return (
     <div className="max-w-2xl space-y-8">
       <div>

@@ -1,25 +1,18 @@
 import "./globals.css";
 import { ReactNode } from "react";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { getRequestUser } from "@/lib/request-user";
 import { isAdminEmail } from "@/lib/admin";
 import { Nav } from "@/components/nav";
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  let user = null;
-  let admin = false;
-  try {
-    const supabase = createServerSupabase();
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-    admin = isAdminEmail(user?.email || "");
-  } catch {
-    // unauthenticated — login page renders without nav
-  }
+  const requestUser = getRequestUser();
 
   return (
     <html lang="en">
       <body>
-        {user && <Nav email={user.email || ""} isAdmin={admin} />}
+        {requestUser && (
+          <Nav email={requestUser.email} isAdmin={isAdminEmail(requestUser.email)} />
+        )}
         <main className="mx-auto max-w-5xl p-4">{children}</main>
       </body>
     </html>

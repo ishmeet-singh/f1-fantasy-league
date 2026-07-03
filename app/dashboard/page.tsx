@@ -1,10 +1,6 @@
 import Link from "next/link";
-import {
-  getLeaderboard, getNextRace, getSeasonProgress,
-  getLastCompletedRace, getPointsHistory, getF1Championship
-} from "@/lib/data";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { getRequestUser } from "@/lib/request-user";
+import { loadDashboardPage } from "@/lib/loaders/dashboard";
 import { Countdown } from "@/components/countdown";
 import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
@@ -15,29 +11,16 @@ import { F1Standings } from "@/components/f1-standings";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
-  const admin = getSupabaseAdmin();
-
-  const [leaderboard, nextRace, season, lastRace, history, f1Standings] = await Promise.all([
-    getLeaderboard(),
-    getNextRace(),
-    getSeasonProgress(),
-    user ? getLastCompletedRace(user.id) : getLastCompletedRace(),
-    getPointsHistory(),
-    getF1Championship(),
-  ]);
-
-  // My picks for next race (for the picks reminder)
-  const myNextPicks = user && nextRace
-    ? await admin
-        .from("predictions")
-        .select("event_type,predicted_position,driver_id,drivers(name)")
-        .eq("race_id", nextRace.id)
-        .eq("user_id", user.id)
-        .order("predicted_position")
-        .then(r => r.data ?? [])
-    : [];
+  const user = getRequestUser();
+  const {
+    leaderboard,
+    nextRace,
+    season,
+    lastRace,
+    history,
+    f1Standings,
+    myNextPicks
+  } = await loadDashboardPage(user?.id);
 
   const totalPicksSubmitted = myNextPicks.length;
   const WINDOW_HOURS = 48;
@@ -54,7 +37,6 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-5">
 
-      {/* ── Last race summary bar ── */}
       {lastRace && (
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/50 text-sm flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
@@ -74,7 +56,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Season progress ── */}
       {season.total > 0 && (
         <div className="flex items-center gap-3 text-xs text-slate-500">
           <span className="shrink-0">2026 Season</span>
@@ -86,7 +67,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Leaderboard (centrepiece) ── */}
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">Leaderboard</h2>
@@ -99,10 +79,8 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* ── Middle row: chart + next race ── */}
       <div className="grid gap-4 lg:grid-cols-3">
 
-        {/* Fantasy progression chart (2/3 width on desktop) */}
         <div className="lg:col-span-2 card space-y-3">
           <div>
             <h3 className="font-semibold">Points Progression</h3>
@@ -111,7 +89,6 @@ export default async function DashboardPage() {
           <FantasyChart history={history} currentUserId={user?.id ?? null} />
         </div>
 
-        {/* Next race (1/3 width on desktop) */}
         <div className="card space-y-3">
           {nextRace ? (
             <>
@@ -146,7 +123,6 @@ export default async function DashboardPage() {
                   ))}
               </div>
 
-              {/* Picks reminder */}
               {picksWindowOpen && (
                 <div className={`rounded-lg px-3 py-2 text-xs ${
                   totalPicksSubmitted > 0
@@ -171,7 +147,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* ── F1 Official Championship ── */}
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
           <div>

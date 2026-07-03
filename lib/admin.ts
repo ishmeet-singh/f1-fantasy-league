@@ -1,4 +1,4 @@
-import { createServerSupabase } from "@/lib/supabase-server";
+import { getRequestUser } from "@/lib/request-user";
 import { redirect } from "next/navigation";
 
 function getAdminEmails(): string[] {
@@ -9,21 +9,14 @@ function getAdminEmails(): string[] {
 }
 
 export async function assertAdmin() {
-  const supabase = createServerSupabase();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = getRequestUser();
   if (!user) redirect("/");
-  if (!getAdminEmails().includes((user.email || "").toLowerCase())) redirect("/dashboard");
+  if (!getAdminEmails().includes(user.email.toLowerCase())) redirect("/dashboard");
   return user;
 }
 
 export async function getSessionUser() {
-  const supabase = createServerSupabase();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  return user;
+  return getRequestUser();
 }
 
 export function isAdminEmail(email: string): boolean {

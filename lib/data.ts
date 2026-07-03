@@ -3,6 +3,11 @@ import { bestNWeekendTotal, BEST_WEEKENDS_COUNT } from "@/lib/scoring";
 import { syncCalendar } from "@/lib/sync";
 import { fetchF1DriverStandings, type F1DriverStanding } from "@/lib/jolpi";
 import { computeSeasonProgress } from "@/lib/cancelled-races";
+import {
+  computeLeaderboard,
+  computeUserRank,
+  type WeekendScoreRow
+} from "@/lib/leaderboard-compute";
 
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
@@ -80,33 +85,13 @@ export type LeaderboardEntry = {
 
 export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   const supabase = getSupabaseAdmin();
-  const { data: users } = await supabase.from("users").select("id,display_name,email");
-  const { data: weekends } = await supabase
-    .from("weekend_scores")
-    .select("user_id,total_points,total_error,exact_matches");
-  const byUser = new Map<string, { points: number[]; error: number; exact: number }>();
-
-  for (const w of weekends || []) {
-    const cur = byUser.get(w.user_id) || { points: [], error: 0, exact: 0 };
-    cur.points.push(w.total_points || 0);
-    cur.error += w.total_error || 0;
-    cur.exact += w.exact_matches || 0;
-    byUser.set(w.user_id, cur);
-  }
-
-  return (users || [])
-    .map((u) => {
-      const agg = byUser.get(u.id) || { points: [], error: 0, exact: 0 };
-      return {
-        id: u.id,
-        name: u.display_name || u.email,
-        score: bestNWeekendTotal(agg.points, BEST_WEEKENDS_COUNT),
-        error: agg.error,
-        exact: agg.exact,
-        top: Math.max(0, ...agg.points)
-      };
-    })
-    .sort((a, b) => b.score - a.score || a.error - b.error || b.exact - a.exact || b.top - a.top);
+  const [usersRes, weekendsRes] = await Promise.all([
+    supabase.from("users").select("id,display_name,email"),
+    supabase
+      .from("weekend_scores")
+      .select("user_id,race_id,total_points,total_error,exact_matches")
+  ]);
+  return computeLeaderboard(usersRes.data ?? [], (weekendsRes.data ?? []) as WeekendScoreRow[]);
 }
 
 // Last completed race with optional user's score
@@ -203,12 +188,19 @@ export type PersonalStats = {
 export async function getPersonalStats(userId: string): Promise<PersonalStats | null> {
   const supabase = getSupabaseAdmin();
 
-  const { data: myScores } = await supabase
-    .from("weekend_scores")
-    .select("total_points,exact_matches,race_id,race_weekends(grand_prix,race_start)")
-    .eq("user_id", userId)
-    .order("race_weekends(race_start)", { ascending: false });
+  const [myScoresRes, usersRes, weekendsRes] = await Promise.all([
+    supabase
+      .from("weekend_scores")
+      .select("total_points,exact_matches,race_id,race_weekends(grand_prix,race_start)")
+      .eq("user_id", userId)
+      .order("race_weekends(race_start)", { ascending: false }),
+    supabase.from("users").select("id,display_name,email"),
+    supabase
+      .from("weekend_scores")
+      .select("user_id,race_id,total_points,total_error,exact_matches")
+  ]);
 
+  const myScores = myScoresRes.data;
   if (!myScores?.length) return null;
 
   const points = myScores.map((s) => s.total_points || 0);
@@ -216,7 +208,6 @@ export async function getPersonalStats(userId: string): Promise<PersonalStats | 
   const bestWeekend = Math.max(0, ...points);
   const exactMatches = myScores.reduce((sum, s) => sum + (s.exact_matches || 0), 0);
 
-  // Only show the last race where the user actually scored points (not 0-point recompute entries)
   const lastScoredRace = myScores.find((s) => (s.total_points || 0) > 0);
   let lastRace: { name: string; points: number } | null = null;
   if (lastScoredRace) {
@@ -227,11 +218,14 @@ export async function getPersonalStats(userId: string): Promise<PersonalStats | 
     lastRace = { name: raceName, points: lastScoredRace.total_points || 0 };
   }
 
-  const lb = await getLeaderboard();
-  const rank = lb.findIndex((e) => e.id === userId) + 1;
+  const leaderboard = computeLeaderboard(
+    usersRes.data ?? [],
+    (weekendsRes.data ?? []) as WeekendScoreRow[]
+  );
+  const rank = computeUserRank(userId, leaderboard);
 
   return {
-    rank: rank || lb.length,
+    rank,
     totalPoints,
     bestWeekend,
     exactMatches,
