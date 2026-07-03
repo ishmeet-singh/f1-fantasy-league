@@ -356,6 +356,7 @@ function LeagueTable({
   });
 
   const labels: Record<TabId, string> = { quali: "Qualifying", sprint: "Sprint", race: "Race" };
+  const shortLabels: Record<TabId, string> = { quali: "Quali", sprint: "Sprint", race: "Race" };
 
   return (
     <section className="overflow-hidden rounded-2xl bg-white" style={{ boxShadow: F1.cardShadow }}>
@@ -378,7 +379,7 @@ function LeagueTable({
               <button
                 type="button"
                 onClick={() => toggle(player.userId)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition active:opacity-80"
+                className="flex w-full items-start gap-3 px-4 py-3 text-left text-sm transition active:opacity-80"
                 style={
                   isMe
                     ? { background: F1.redLight, borderLeft: `3px solid ${F1.red}` }
@@ -386,38 +387,43 @@ function LeagueTable({
                 }
               >
                 <span
-                  className="w-5 shrink-0 text-xs font-bold tabular-nums"
+                  className="w-5 shrink-0 pt-0.5 text-xs font-bold tabular-nums"
                   style={{ color: i < 3 ? F1.podium[i] : F1.carbonLight }}
                 >
                   {i + 1}
                 </span>
-                <span
-                  className="min-w-0 flex-1 truncate font-semibold"
-                  style={{ color: F1.carbon }}
-                >
-                  {player.userName}
-                  {isMe && (
-                    <span className="ml-1.5 text-xs font-bold" style={{ color: F1.red }}>
-                      (you)
-                    </span>
-                  )}
-                </span>
-                <div className="hidden items-center gap-3 text-xs sm:flex" style={{ color: F1.carbonLight }}>
-                  {visibleEvents.map((et) => (
-                    <span key={et}>
-                      {labels[et][0]}:{" "}
-                      <span className="font-semibold" style={{ color: F1.carbon }}>
-                        {player.scores[et] ?? "—"}
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold" style={{ color: F1.carbon }}>
+                    {player.userName}
+                    {isMe && (
+                      <span className="ml-1.5 text-xs font-bold" style={{ color: F1.red }}>
+                        (you)
                       </span>
-                    </span>
-                  ))}
+                    )}
+                  </span>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {visibleEvents.map((et) => (
+                      <span
+                        key={et}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums"
+                        style={{ background: F1.offWhite, color: F1.carbonMid, border: `1px solid ${F1.gridLine}` }}
+                      >
+                        <span>{shortLabels[et]}</span>
+                        <span style={{ color: F1.carbon }}>
+                          {player.scores[et] ?? "—"}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <span className="shrink-0 font-mono text-sm font-bold tabular-nums" style={{ color: F1.red }}>
-                  {weekend}pt
-                </span>
-                <span className="w-3 shrink-0 text-xs" style={{ color: F1.carbonLight }}>
-                  {open ? "▲" : "▼"}
-                </span>
+                <div className="flex shrink-0 flex-col items-end gap-0.5 pt-0.5">
+                  <span className="font-mono text-sm font-bold tabular-nums" style={{ color: F1.red }}>
+                    {weekend}pt
+                  </span>
+                  <span className="text-[10px]" style={{ color: F1.carbonLight }}>
+                    {open ? "▲" : "▼"}
+                  </span>
+                </div>
               </button>
 
               {open && (
