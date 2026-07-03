@@ -147,7 +147,7 @@ export function FantasyChart({
             const row = items?.[0]?.payload as ChartPoint | undefined;
             return row?.raceFull ?? "";
           }}
-          formatter={(value: number, name: string) => [`${value} pts`, name]}
+          formatter={(value, name) => [`${value ?? 0} pts`, name ?? ""]}
         />
         <Legend
           iconType="plainline"
