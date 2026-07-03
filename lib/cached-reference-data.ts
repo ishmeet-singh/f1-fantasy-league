@@ -15,6 +15,7 @@ export type DriverRow = { id: string; name: string; team: string };
 
 export type WeekendScoreTotalRow = {
   user_id: string;
+  race_id: string;
   total_points: number | null;
   total_error: number | null;
   exact_matches: number | null;
@@ -46,16 +47,19 @@ export const getCachedDrivers = unstable_cache(fetchDriversUncached, ["drivers-v
   revalidate: 60
 });
 
-async function fetchWeekendScoreTotalsUncached(): Promise<WeekendScoreTotalRow[]> {
+async function fetchWeekendScoresUncached(): Promise<WeekendScoreTotalRow[]> {
   const { data } = await getSupabaseAdmin()
     .from("weekend_scores")
-    .select("user_id,total_points,total_error,exact_matches");
+    .select("user_id,race_id,total_points,total_error,exact_matches");
   return data ?? [];
 }
 
-/** Minimal weekend_scores columns for rank — 60s cache, shared across stats requests. */
-export const getCachedWeekendScoreTotals = unstable_cache(
-  fetchWeekendScoreTotalsUncached,
-  ["weekend-score-totals-v1"],
+/** All weekend_scores rows for leaderboard/history — 60s cache, shared across dashboard and stats. */
+export const getCachedWeekendScores = unstable_cache(
+  fetchWeekendScoresUncached,
+  ["weekend-scores-v1"],
   { revalidate: 60 }
 );
+
+/** @alias getCachedWeekendScores */
+export const getCachedWeekendScoreTotals = getCachedWeekendScores;

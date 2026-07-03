@@ -2,8 +2,8 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { syncCalendar } from "@/lib/sync";
 import { fetchF1DriverStandings, type F1DriverStanding } from "@/lib/jolpi";
 import { computeSeasonProgress } from "@/lib/cancelled-races";
-import { computeLeaderboard, type WeekendScoreRow } from "@/lib/leaderboard-compute";
-import { getCachedWeekendScoreTotals } from "@/lib/cached-reference-data";
+import { computeLeaderboard, computePointsHistory, type WeekendScoreRow } from "@/lib/leaderboard-compute";
+import { getCachedRaceWeekends, getCachedWeekendScores } from "@/lib/cached-reference-data";
 import { buildPersonalStats } from "@/lib/personal-stats";
 import type { UserRow } from "@/lib/leaderboard-compute";
 
@@ -83,13 +83,11 @@ export type LeaderboardEntry = {
 
 export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   const supabase = getSupabaseAdmin();
-  const [usersRes, weekendsRes] = await Promise.all([
+  const [usersRes, weekends] = await Promise.all([
     supabase.from("users").select("id,display_name,email"),
-    supabase
-      .from("weekend_scores")
-      .select("user_id,race_id,total_points,total_error,exact_matches")
+    getCachedWeekendScores()
   ]);
-  return computeLeaderboard(usersRes.data ?? [], (weekendsRes.data ?? []) as WeekendScoreRow[]);
+  return computeLeaderboard(usersRes.data ?? [], weekends as WeekendScoreRow[]);
 }
 
 // Last completed race with optional user's score
@@ -147,32 +145,20 @@ export type PointsHistoryEntry = {
 export async function getPointsHistory(): Promise<PointsHistoryEntry[]> {
   const supabase = getSupabaseAdmin();
 
-  const [{ data: users }, { data: races }, { data: scores }] = await Promise.all([
+  const [{ data: users }, raceWeekends, weekends, { data: completedResults }] = await Promise.all([
     supabase.from("users").select("id,display_name,email"),
-    supabase.from("race_weekends").select("id,grand_prix,race_start").order("race_start", { ascending: true }),
-    supabase.from("weekend_scores").select("user_id,race_id,total_points")
+    getCachedRaceWeekends(),
+    getCachedWeekendScores(),
+    supabase.from("results").select("race_id").eq("event_type", "race")
   ]);
 
-  // Only include races that have been completed (have results)
-  const { data: completedResults } = await supabase
-    .from("results").select("race_id").eq("event_type", "race");
-  const completedIds = new Set((completedResults ?? []).map(r => r.race_id));
-  const completedRaces = (races ?? []).filter(r => completedIds.has(r.id));
-
-  const scoreMap = new Map<string, number>();
-  for (const s of scores ?? []) {
-    scoreMap.set(`${s.user_id}:${s.race_id}`, s.total_points ?? 0);
-  }
-
-  return (users ?? []).map(u => ({
-    userId: u.id,
-    userName: u.display_name || u.email.split("@")[0],
-    races: completedRaces.map(r => ({
-      raceId: r.id,
-      raceName: r.grand_prix.replace(" Grand Prix", "").replace("Grand Prix", "").trim(),
-      points: scoreMap.has(`${u.id}:${r.id}`) ? (scoreMap.get(`${u.id}:${r.id}`) ?? 0) : null
-    }))
-  }));
+  const completedIds = new Set((completedResults ?? []).map((r) => r.race_id));
+  return computePointsHistory(
+    users ?? [],
+    raceWeekends,
+    weekends as WeekendScoreRow[],
+    completedIds
+  );
 }
 
 export type PersonalStats = {
@@ -192,7 +178,7 @@ export async function getPersonalStats(userId: string): Promise<PersonalStats | 
       .select("total_points,exact_matches,race_id,race_weekends(grand_prix,race_start)")
       .eq("user_id", userId),
     supabase.from("users").select("id,display_name,email"),
-    getCachedWeekendScoreTotals()
+    getCachedWeekendScores()
   ]);
 
   return buildPersonalStats(

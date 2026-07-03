@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { getCachedRaceWeekends } from "@/lib/cached-reference-data";
+import { getCachedRaceWeekends, getCachedWeekendScores } from "@/lib/cached-reference-data";
 import { computeSeasonProgress } from "@/lib/cancelled-races";
 import {
   computeLeaderboard,
@@ -62,25 +62,25 @@ function pickLastCompletedRace(
 export async function loadDashboardPage(userId: string | undefined): Promise<DashboardPageData> {
   const supabase = getSupabaseAdmin();
 
-  const [raceWeekends, usersRes, completedRes, weekendsRes] = await Promise.all([
+  const [raceWeekends, usersRes, completedRes, weekends] = await Promise.all([
     getCachedRaceWeekends(),
     supabase.from("users").select("id,display_name,email"),
     supabase.from("results").select("race_id").eq("event_type", "race"),
-    supabase.from("weekend_scores").select("user_id,race_id,total_points,total_error,exact_matches")
+    getCachedWeekendScores()
   ]);
 
   const users = usersRes.data ?? [];
   const completedIds = new Set((completedRes.data ?? []).map((r) => r.race_id));
-  const weekends = (weekendsRes.data ?? []) as WeekendScoreRow[];
+  const weekendRows = weekends as WeekendScoreRow[];
 
-  const leaderboard = computeLeaderboard(users, weekends);
-  const history = computePointsHistory(users, raceWeekends, weekends, completedIds);
+  const leaderboard = computeLeaderboard(users, weekendRows);
+  const history = computePointsHistory(users, raceWeekends, weekendRows, completedIds);
   const season = computeSeasonProgress({
     raceIds: raceWeekends.map((r) => r.id),
     completedRaceIds: completedIds
   });
   const nextRace = pickNextRace(raceWeekends, completedIds);
-  const lastRace = pickLastCompletedRace(raceWeekends, completedIds, userId, weekends);
+  const lastRace = pickLastCompletedRace(raceWeekends, completedIds, userId, weekendRows);
 
   let myNextPicks: DashboardPageData["myNextPicks"] = [];
   if (userId && nextRace) {

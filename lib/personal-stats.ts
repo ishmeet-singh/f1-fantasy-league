@@ -16,6 +16,7 @@ export type MyWeekendScoreRow = {
 
 export type WeekendScoreTotalRow = {
   user_id: string;
+  race_id: string;
   total_points: number | null;
   total_error: number | null;
   exact_matches: number | null;
@@ -30,7 +31,7 @@ function raceWeekendStart(row: MyWeekendScoreRow): string {
 function totalsAsWeekendRows(totals: WeekendScoreTotalRow[]): WeekendScoreRow[] {
   return totals.map((t) => ({
     user_id: t.user_id,
-    race_id: "",
+    race_id: t.race_id,
     total_points: t.total_points,
     total_error: t.total_error,
     exact_matches: t.exact_matches

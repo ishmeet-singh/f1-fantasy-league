@@ -23,9 +23,9 @@ describe("buildPersonalStats", () => {
       }
     ];
     const totals = [
-      { user_id: "u1", total_points: 100, total_error: 5, exact_matches: 3 },
-      { user_id: "u1", total_points: 80, total_error: 2, exact_matches: 1 },
-      { user_id: "u2", total_points: 150, total_error: 1, exact_matches: 2 }
+      { user_id: "u1", race_id: "r2", total_points: 100, total_error: 5, exact_matches: 3 },
+      { user_id: "u1", race_id: "r1", total_points: 80, total_error: 2, exact_matches: 1 },
+      { user_id: "u2", race_id: "r1", total_points: 150, total_error: 1, exact_matches: 2 }
     ];
 
     const stats = buildPersonalStats("u1", myScores, users, totals);
