@@ -1,7 +1,6 @@
 import { fetchDrivers, fetchMeetings, fetchSessionResults, fetchSessionsForMeeting } from "@/lib/openf1";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { recomputeAllScores } from "@/lib/recompute";
-import { EventType } from "@/lib/types";
 import { syncResultsJolpi } from "@/lib/sync-jolpi";
 import {
   findJolpiRoundByDate,
