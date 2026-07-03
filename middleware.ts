@@ -1,20 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authenticateMiddlewareRequest } from "@/lib/auth/middleware-auth";
+import {
+  isAdminApi,
+  isProtectedApi,
+  isProtectedPage
+} from "@/lib/auth/protected-routes";
 
-const PROTECTED_PAGE_PREFIXES = ["/dashboard", "/picks", "/results", "/profile", "/admin", "/rules"];
-const PROTECTED_API_PREFIXES = ["/api/profile"];
-const ADMIN_API_PREFIX = "/api/admin";
-
-function isProtectedPage(pathname: string) {
-  return PROTECTED_PAGE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+/** Preserve Supabase session cookie updates on redirects and JSON errors. */
+function withSessionCookies(from: NextResponse, to: NextResponse): NextResponse {
+  for (const cookie of from.cookies.getAll()) {
+    to.cookies.set(cookie);
+  }
+  return to;
 }
 
-function isProtectedApi(pathname: string) {
-  return PROTECTED_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+function jsonResponse(
+  supabaseResponse: NextResponse,
+  body: object,
+  status: number
+): NextResponse {
+  return withSessionCookies(supabaseResponse, NextResponse.json(body, { status }));
 }
 
-function isAdminApi(pathname: string) {
-  return pathname === ADMIN_API_PREFIX || pathname.startsWith(`${ADMIN_API_PREFIX}/`);
+function forwardWithUser(
+  requestHeaders: Headers,
+  user: { id: string; email: string },
+  supabaseResponse: NextResponse
+): NextResponse {
+  requestHeaders.set("x-user-id", user.id);
+  requestHeaders.set("x-user-email", user.email);
+  const forwarded = NextResponse.next({ request: { headers: requestHeaders } });
+  return withSessionCookies(supabaseResponse, forwarded);
 }
 
 export async function middleware(request: NextRequest) {
@@ -26,37 +42,21 @@ export async function middleware(request: NextRequest) {
   if (!user && isProtectedPage(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
-    return NextResponse.redirect(url);
+    return withSessionCookies(supabaseResponse, NextResponse.redirect(url));
   }
 
   if (!user && isProtectedApi(pathname)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!user && isAdminApi(pathname)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonResponse(supabaseResponse, { error: "Unauthorized" }, 401);
   }
 
   if (user && pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
-    const redirect = NextResponse.redirect(url);
-    for (const cookie of supabaseResponse.cookies.getAll()) {
-      redirect.cookies.set(cookie);
-    }
-    return redirect;
+    return withSessionCookies(supabaseResponse, NextResponse.redirect(url));
   }
 
   if (user) {
-    requestHeaders.set("x-user-id", user.id);
-    requestHeaders.set("x-user-email", user.email);
-    const forwarded = NextResponse.next({
-      request: { headers: requestHeaders }
-    });
-    for (const cookie of supabaseResponse.cookies.getAll()) {
-      forwarded.cookies.set(cookie);
-    }
-    return forwarded;
+    return forwardWithUser(requestHeaders, user, supabaseResponse);
   }
 
   return supabaseResponse;
@@ -72,6 +72,7 @@ export const config = {
     "/admin/:path*",
     "/rules/:path*",
     "/api/profile/:path*",
+    "/api/picks",
     "/api/admin/:path*"
   ]
 };
