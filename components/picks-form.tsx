@@ -6,18 +6,15 @@ import {
   DragOverlay,
   PointerSensor,
   TouchSensor,
+  closestCenter,
   useSensor,
   useSensors,
   useDraggable,
+  useDroppable,
   type DragEndEvent,
   type DragStartEvent
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove
-} from "@dnd-kit/sortable";
+import { arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { F1 } from "@/lib/f1-theme";
 
@@ -91,55 +88,33 @@ function useCountdown(deadline: string, locked: boolean) {
   return label;
 }
 
-function SortableSlot({
-  id,
+function FilledSlot({
   slotIdx,
   driver,
   onRemove
 }: {
-  id: string;
   slotIdx: number;
-  driver: Driver | null;
+  driver: Driver;
   onRemove: () => void;
 }) {
-  const isEmpty = !driver;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({ id, disabled: isEmpty });
+  const id = `slot-${slotIdx}`;
+  const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({ id });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition
+  const ref = (el: HTMLElement | null) => {
+    setDragRef(el);
+    setDropRef(el);
   };
-
-  if (isEmpty) {
-    return (
-      <div
-        ref={setNodeRef}
-        className="flex items-center gap-3 rounded-2xl border border-dashed p-3 transition-colors"
-        style={{
-          ...style,
-          borderColor: isOver ? F1.red : F1.gridLine,
-          background: isOver ? F1.redLight : F1.offWhite,
-          opacity: isOver ? 1 : 0.7
-        }}
-      >
-        {posBadge(slotIdx)}
-        <span className="text-sm" style={{ color: isOver ? F1.red : F1.carbonLight }}>
-          {isOver ? "Drop here" : "Tap a driver below"}
-        </span>
-      </div>
-    );
-  }
 
   return (
     <div
-      ref={setNodeRef}
+      ref={ref}
       className="flex items-center gap-3 rounded-2xl border p-3 transition-colors"
       style={{
-        ...style,
-        opacity: isDragging ? 0 : 1,
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.4 : 1,
         borderColor: isOver ? F1.red : F1.gridLine,
-        background: F1.white,
+        background: isOver ? F1.redLight : F1.white,
         boxShadow: isOver ? `0 0 0 2px ${F1.red}33` : undefined
       }}
     >
@@ -166,6 +141,27 @@ function SortableSlot({
       >
         ✕
       </button>
+    </div>
+  );
+}
+
+function EmptySlot({ slotIdx }: { slotIdx: number }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `slot-${slotIdx}` });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex items-center gap-3 rounded-2xl border border-dashed p-3 transition-colors"
+      style={{
+        borderColor: isOver ? F1.red : F1.gridLine,
+        background: isOver ? F1.redLight : F1.offWhite,
+        opacity: isOver ? 1 : 0.7
+      }}
+    >
+      {posBadge(slotIdx)}
+      <span className="text-sm" style={{ color: isOver ? F1.red : F1.carbonLight }}>
+        {isOver ? "Drop here" : "Tap a driver below"}
+      </span>
     </div>
   );
 }
@@ -204,33 +200,29 @@ function PoolChip({
   return (
     <span
       ref={setNodeRef}
-      className="inline-flex items-center overflow-hidden rounded-full border"
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      onClick={!isDragging ? onTap : undefined}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onTap();
+        }
+      }}
+      {...listeners}
+      {...attributes}
+      className="inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
       style={{
         transform: CSS.Translate.toString(transform),
-        opacity: isDragging ? 0 : 1,
+        opacity: isDragging ? 0.4 : 1,
         background: F1.white,
-        borderColor: F1.gridLine
+        color: F1.carbon,
+        borderColor: F1.gridLine,
+        cursor: disabled ? "not-allowed" : "grab"
       }}
     >
-      <span
-        {...listeners}
-        {...attributes}
-        className="cursor-grab touch-none self-stretch px-2 py-2 text-sm leading-none active:cursor-grabbing"
-        style={{ color: F1.carbonLight }}
-        aria-hidden
-      >
-        ⠿
-      </span>
-      <button
-        type="button"
-        onClick={!isDragging ? onTap : undefined}
-        disabled={disabled}
-        className="inline-flex items-center gap-1.5 py-2 pr-4 text-sm font-semibold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-        style={{ color: F1.carbon }}
-      >
-        {teamDot(driver.team)}
-        {driver.name}
-      </button>
+      {teamDot(driver.team)}
+      {driver.name}
     </span>
   );
 }
@@ -286,13 +278,19 @@ export function PicksForm({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 8 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
   );
 
-  const slotIds = slots.map((driverId, i) => driverId ?? `empty-${i}`);
   const isPoolDrag = activeId?.startsWith("pool-");
-  const activeSlotDriver = activeId && !isPoolDrag ? (driverById.get(activeId) ?? null) : null;
-  const activeSlotIdx = activeSlotDriver ? slots.indexOf(activeId!) : null;
+  const activeSlotIdx =
+    activeId?.startsWith("slot-") ? parseInt(activeId.slice(5), 10) : null;
+  const activeSlotDriver =
+    activeSlotIdx !== null && !Number.isNaN(activeSlotIdx)
+      ? (() => {
+          const driverId = slots[activeSlotIdx];
+          return driverId ? (driverById.get(driverId) ?? null) : null;
+        })()
+      : null;
   const activePoolDriver = isPoolDrag ? (driverById.get(activeId!.slice(5)) ?? null) : null;
 
   function handleDragStart(event: DragStartEvent) {
@@ -303,25 +301,28 @@ export function PicksForm({
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
+
     const activeIdStr = String(active.id);
     const overIdStr = String(over.id);
+    if (!overIdStr.startsWith("slot-")) return;
 
-    if (!activeIdStr.startsWith("pool-")) {
-      const from = slotIds.indexOf(activeIdStr);
-      const to = slotIds.indexOf(overIdStr);
-      if (from !== -1 && to !== -1 && from !== to) {
-        setSlots((prev) => arrayMove(prev, from, to));
-      }
-    } else {
+    const to = parseInt(overIdStr.slice(5), 10);
+    if (Number.isNaN(to)) return;
+
+    if (activeIdStr.startsWith("slot-")) {
+      const from = parseInt(activeIdStr.slice(5), 10);
+      if (Number.isNaN(from) || from === to) return;
+      setSlots((prev) => arrayMove(prev, from, to));
+      return;
+    }
+
+    if (activeIdStr.startsWith("pool-")) {
       const driverId = activeIdStr.slice(5);
-      const to = slotIds.indexOf(overIdStr);
-      if (to !== -1) {
-        setSlots((prev) => {
-          const next = [...prev];
-          next[to] = driverId;
-          return next;
-        });
-      }
+      setSlots((prev) => {
+        const next = [...prev];
+        next[to] = driverId;
+        return next;
+      });
     }
   }
 
@@ -456,26 +457,24 @@ export function PicksForm({
         )}
       </div>
 
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
         <div className="space-y-2">
           <p className="text-xs" style={{ color: F1.carbonLight }}>
-            {filledCount}/{size} picked · hold ⠿ to reorder
+            {filledCount}/{size} picked · hold ⠿ to reorder · hold chip to drag to slot
           </p>
-          <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
-            {slots.map((driverId, i) => {
-              const id = slotIds[i];
-              const driver = driverId ? (driverById.get(driverId) ?? null) : null;
-              return (
-                <SortableSlot
-                  key={id}
-                  id={id}
-                  slotIdx={i}
-                  driver={driver}
-                  onRemove={() => removeFromSlot(i)}
-                />
-              );
-            })}
-          </SortableContext>
+          {slots.map((driverId, i) => {
+            const driver = driverId ? (driverById.get(driverId) ?? null) : null;
+            return driver ? (
+              <FilledSlot key={i} slotIdx={i} driver={driver} onRemove={() => removeFromSlot(i)} />
+            ) : (
+              <EmptySlot key={i} slotIdx={i} />
+            );
+          })}
         </div>
 
         <div className="mt-5 space-y-3 border-t pt-4" style={{ borderColor: F1.gridLine }}>
@@ -483,9 +482,9 @@ export function PicksForm({
             Driver pool
           </p>
           <p className="text-xs" style={{ color: F1.carbonLight }}>
-            {pool.length > 0 ? "Tap to add · or drag to a slot" : "All drivers picked"}
+            {pool.length > 0 ? "Tap to add · or hold and drag to a slot" : "All drivers picked"}
           </p>
-          <div className="flex flex-wrap gap-2 touch-pan-y">
+          <div className="flex flex-wrap gap-2">
             {pool.map((d) => (
               <PoolChip key={d.id} driver={d} onTap={() => tapAddToPool(d.id)} disabled={allFilled} />
             ))}
