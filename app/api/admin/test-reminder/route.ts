@@ -1,4 +1,4 @@
-import { assertAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendReminderEmail } from "@/lib/email";
 import { NextResponse } from "next/server";
@@ -9,7 +9,8 @@ import { NextResponse } from "next/server";
  * Use this to verify Resend API key + email delivery works.
  */
 export async function POST() {
-  const adminUser = await assertAdmin();
+  const adminUser = requireAdminApi();
+  if (adminUser instanceof NextResponse) return adminUser;
 
   const checks: Record<string, string> = {};
 

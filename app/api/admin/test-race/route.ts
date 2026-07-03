@@ -1,11 +1,12 @@
-import { assertAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 const TEST_RACE_ID = "test-race-2099";
 
 export async function POST(req: Request) {
-  await assertAdmin();
+  const auth = requireAdminApi();
+  if (auth instanceof NextResponse) return auth;
   const { action } = await req.json();
   const supabase = getSupabaseAdmin();
 

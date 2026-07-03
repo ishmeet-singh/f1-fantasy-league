@@ -1,4 +1,4 @@
-import { assertAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { recomputeAllScores } from "@/lib/recompute";
 import { NextResponse } from "next/server";
@@ -13,7 +13,8 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export async function POST(req: Request) {
-  await assertAdmin();
+  const auth = requireAdminApi();
+  if (auth instanceof NextResponse) return auth;
   const { raceId } = await req.json();
   if (!raceId) return NextResponse.json({ error: "raceId required" }, { status: 400 });
 

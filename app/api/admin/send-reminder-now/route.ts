@@ -1,4 +1,4 @@
-import { assertAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendReminderEmail } from "@/lib/email";
 import { NextResponse } from "next/server";
@@ -15,7 +15,8 @@ const schema = z.object({
  * for the given race+event. Bypasses the time-window check.
  */
 export async function POST(req: Request) {
-  await assertAdmin();
+  const auth = requireAdminApi();
+  if (auth instanceof NextResponse) return auth;
   const body = schema.parse(await req.json());
   const { raceId, eventType } = body;
 

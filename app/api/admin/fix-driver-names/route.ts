@@ -1,4 +1,4 @@
-import { assertAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { openF1Get } from "@/lib/openf1";
 import { NextResponse } from "next/server";
@@ -15,7 +15,8 @@ import { NextResponse } from "next/server";
  * Also fetch Jolpi's driver list as a cross-reference.
  */
 export async function POST() {
-  await assertAdmin();
+  const auth = requireAdminApi();
+  if (auth instanceof NextResponse) return auth;
   const supabase = getSupabaseAdmin();
 
   const results: { driver_id: string; old_name: string; new_name: string; source: string }[] = [];

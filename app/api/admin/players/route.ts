@@ -1,4 +1,4 @@
-import { assertAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -8,7 +8,8 @@ const removeSchema = z.object({ userId: z.string().uuid() });
 
 // GET /api/admin/players?email=xxx — generate a magic link without sending an email
 export async function GET(req: Request) {
-  await assertAdmin();
+  const auth = requireAdminApi();
+  if (auth instanceof NextResponse) return auth;
   const { searchParams } = new URL(req.url);
   const email = searchParams.get("email");
   if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
@@ -27,7 +28,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  await assertAdmin();
+  const auth = requireAdminApi();
+  if (auth instanceof NextResponse) return auth;
   const body = addSchema.parse(await req.json());
   const supabase = getSupabaseAdmin();
 
@@ -54,7 +56,8 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  await assertAdmin();
+  const auth = requireAdminApi();
+  if (auth instanceof NextResponse) return auth;
   const body = removeSchema.parse(await req.json());
   const supabase = getSupabaseAdmin();
 

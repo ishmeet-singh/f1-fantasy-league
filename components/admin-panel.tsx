@@ -226,17 +226,24 @@ export function AdminPanel({
     setReminderLoading(true);
     setReminderStatus("");
     setReminderError("");
-    const res = await fetch("/api/admin/send-reminder-now", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ raceId: reminderRaceId, eventType: reminderEvent })
-    });
-    const json = await res.json();
-    setReminderLoading(false);
-    if (res.ok) {
-      setReminderStatus(`Sent ${json.sent} email${json.sent !== 1 ? "s" : ""}. ${json.alreadySubmitted} player${json.alreadySubmitted !== 1 ? "s" : ""} already submitted — skipped.`);
-    } else {
-      setReminderError(json.error || "Failed");
+    try {
+      const res = await fetch("/api/admin/send-reminder-now", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ raceId: reminderRaceId, eventType: reminderEvent })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setReminderStatus(
+          `Sent ${json.sent} email${json.sent !== 1 ? "s" : ""}. ${json.alreadySubmitted} player${json.alreadySubmitted !== 1 ? "s" : ""} already submitted — skipped.`
+        );
+      } else {
+        setReminderError(json.error || "Failed");
+      }
+    } catch {
+      setReminderError("Request failed — try again");
+    } finally {
+      setReminderLoading(false);
     }
   }
 
