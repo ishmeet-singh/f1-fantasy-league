@@ -1,31 +1,58 @@
 "use client";
 
 import { useState } from "react";
+import { F1 } from "@/lib/f1-theme";
 
 type Player = { id: string; email: string; display_name: string | null; created_at: string };
 type RaceOption = { id: string; grand_prix: string; race_start: string; has_sprint: boolean };
+type DriverOption = { id: string; name: string; team: string };
 
 const TEST_RACE_ID = "test-race-2099";
 
+const fieldClass =
+  "w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#D31411]/30";
+const fieldStyle = { borderColor: F1.gridLine, background: F1.offWhite, color: F1.carbon };
+const btnClass =
+  "rounded-xl px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="card space-y-4">
-      <h2 className="text-lg font-semibold border-b border-slate-800 pb-2">{title}</h2>
+    <section className="space-y-4 rounded-2xl bg-white p-4" style={{ boxShadow: F1.cardShadow }}>
+      <h2
+        className="border-b pb-2 text-base font-bold"
+        style={{ color: F1.carbon, borderColor: F1.gridLine }}
+      >
+        {title}
+      </h2>
       {children}
-    </div>
+    </section>
   );
 }
 
 function StatusMsg({ status, error }: { status: string; error: string }) {
   if (!status && !error) return null;
   return error ? (
-    <p className="text-sm text-red-400">{error}</p>
+    <p className="text-sm font-medium" style={{ color: F1.red }}>
+      {error}
+    </p>
   ) : (
-    <p className="text-sm text-emerald-400">{status}</p>
+    <p className="text-sm font-medium" style={{ color: "#166534" }}>
+      {status}
+    </p>
   );
 }
 
-export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlayers: Player[]; upcomingRaces?: RaceOption[] }) {
+export function AdminPanel({
+  initialPlayers,
+  upcomingRaces = [],
+  allRaces = [],
+  drivers = []
+}: {
+  initialPlayers: Player[];
+  upcomingRaces?: RaceOption[];
+  allRaces?: RaceOption[];
+  drivers?: DriverOption[];
+}) {
   const [players, setPlayers] = useState<Player[]>(initialPlayers);
   const [newEmail, setNewEmail] = useState("");
   const [playerStatus, setPlayerStatus] = useState("");
@@ -45,6 +72,18 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
   const [reminderStatus, setReminderStatus] = useState("");
   const [reminderError, setReminderError] = useState("");
   const [reminderLoading, setReminderLoading] = useState(false);
+
+  const [setPicksEmail, setSetPicksEmail] = useState("");
+  const [setPicksRaceId, setSetPicksRaceId] = useState(
+    () => allRaces.find((r) => r.grand_prix.toLowerCase().includes("canada"))?.id ?? allRaces[0]?.id ?? ""
+  );
+  const [setPicksEvent, setSetPicksEvent] = useState<"quali" | "sprint" | "race">("quali");
+  const [setPicksP1, setSetPicksP1] = useState("");
+  const [setPicksP2, setSetPicksP2] = useState("");
+  const [setPicksP3, setSetPicksP3] = useState("");
+  const [setPicksStatus, setSetPicksStatus] = useState("");
+  const [setPicksError, setSetPicksError] = useState("");
+  const [setPicksLoading, setSetPicksLoading] = useState(false);
 
   async function addPlayer() {
     if (!newEmail.trim()) return;
@@ -133,6 +172,34 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
     else setTestStatus("Random results simulated and scores recomputed — check the leaderboard");
   }
 
+  async function submitSetPicks() {
+    if (!setPicksEmail.trim() || !setPicksRaceId || !setPicksP1 || !setPicksP2 || !setPicksP3) {
+      setSetPicksError("Email, race, and all three positions are required");
+      return;
+    }
+    setSetPicksLoading(true);
+    setSetPicksStatus("");
+    setSetPicksError("");
+    try {
+      const res = await fetch("/api/admin/set-picks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: setPicksEmail.trim(),
+          raceId: setPicksRaceId,
+          eventType: setPicksEvent,
+          picks: { "1": setPicksP1, "2": setPicksP2, "3": setPicksP3 }
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) setSetPicksError(json.error || "Failed to save picks");
+      else setSetPicksStatus(`Saved ${setPicksEvent} picks for ${json.email}`);
+    } catch {
+      setSetPicksError("Network error");
+    }
+    setSetPicksLoading(false);
+  }
+
   async function manualAction(endpoint: string, label: string) {
     setSyncLoading(label);
     setSyncStatus("");
@@ -206,22 +273,24 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Players */}
       <Section title="Players">
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             type="email"
             placeholder="player@example.com"
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addPlayer()}
-            className="flex-1 rounded bg-slate-800 border border-slate-700 p-2 text-sm focus:outline-none focus:border-red-500"
+            className={`flex-1 ${fieldClass}`}
+            style={fieldStyle}
           />
           <button
             onClick={addPlayer}
             disabled={playerLoading}
-            className="rounded bg-red-600 hover:bg-red-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`shrink-0 ${btnClass} text-white`}
+            style={{ background: F1.red }}
           >
             {playerLoading ? "Adding…" : "Add"}
           </button>
@@ -229,79 +298,196 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
         <StatusMsg status={playerStatus} error={playerError} />
 
         {players.length === 0 ? (
-          <p className="text-slate-500 text-sm">No players yet.</p>
+          <p className="text-sm" style={{ color: F1.carbonLight }}>
+            No players yet.
+          </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-400 border-b border-slate-800">
-                <th className="pb-2">Email</th>
-                <th className="pb-2">Name</th>
-                <th className="pb-2">Joined</th>
-                <th className="pb-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.map((p) => (
-                <tr key={p.id} className="border-b border-slate-800/50">
-                  <td className="py-2 text-slate-300">{p.email}</td>
-                  <td className="py-2 text-slate-400">{p.display_name || "—"}</td>
-                  <td className="py-2 text-slate-500 text-xs">
-                    {new Date(p.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="py-2 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        onClick={() => getMagicLink(p.email)}
-                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                        title="Generate sign-in link (no email needed)"
-                      >
-                        Get link
-                      </button>
-                      <button
-                        onClick={() => removePlayer(p.id, p.email)}
-                        className="text-xs text-slate-500 hover:text-red-400 transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto -mx-1 px-1">
+            <table className="w-full min-w-[520px] text-sm">
+              <thead>
+                <tr
+                  className="text-left text-[10px] font-bold uppercase tracking-wide"
+                  style={{ color: F1.carbonLight, borderBottom: `1px solid ${F1.gridLine}` }}
+                >
+                  <th className="pb-2 pr-2">Email</th>
+                  <th className="pb-2 pr-2">Name</th>
+                  <th className="pb-2 pr-2">Joined</th>
+                  <th className="pb-2" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {players.map((p, i) => (
+                  <tr
+                    key={p.id}
+                    style={{
+                      borderTop: `1px solid ${F1.gridLine}`,
+                      background: i % 2 ? F1.offWhite : F1.white
+                    }}
+                  >
+                    <td className="py-2.5 pr-2" style={{ color: F1.carbon }}>
+                      {p.email}
+                    </td>
+                    <td className="py-2.5 pr-2" style={{ color: F1.carbonMid }}>
+                      {p.display_name || "—"}
+                    </td>
+                    <td className="py-2.5 pr-2 text-xs" style={{ color: F1.carbonLight }}>
+                      {new Date(p.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => getMagicLink(p.email)}
+                          className="text-xs font-semibold transition hover:opacity-80"
+                          style={{ color: "#2563EB" }}
+                          title="Generate sign-in link (no email needed)"
+                        >
+                          Get link
+                        </button>
+                        <button
+                          onClick={() => removePlayer(p.id, p.email)}
+                          className="text-xs font-semibold transition hover:opacity-80"
+                          style={{ color: F1.red }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Section>
 
+      {/* Backfill picks */}
+      {allRaces.length > 0 && drivers.length > 0 && (
+        <Section title="Backfill player picks">
+          <p className="text-sm" style={{ color: F1.carbonLight }}>
+            Save picks for someone who arranged them but forgot to click Save. Bypasses lock checks (use after
+            quali only if results are not in yet).
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-sm">
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+                Player email
+              </span>
+              <input
+                type="email"
+                value={setPicksEmail}
+                onChange={(e) => setSetPicksEmail(e.target.value)}
+                placeholder="friend@example.com"
+                className={fieldClass}
+                style={fieldStyle}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+                Race
+              </span>
+              <select
+                value={setPicksRaceId}
+                onChange={(e) => setSetPicksRaceId(e.target.value)}
+                className={fieldClass}
+                style={fieldStyle}
+              >
+                {allRaces.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.grand_prix}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+                Session
+              </span>
+              <select
+                value={setPicksEvent}
+                onChange={(e) => setSetPicksEvent(e.target.value as "quali" | "sprint" | "race")}
+                className={fieldClass}
+                style={fieldStyle}
+              >
+                <option value="quali">Qualifying</option>
+                <option value="sprint">Sprint</option>
+                <option value="race">Race</option>
+              </select>
+            </label>
+          </div>
+          {setPicksEvent === "quali" && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(["P1", "P2", "P3"] as const).map((label, i) => {
+                const val = [setPicksP1, setPicksP2, setPicksP3][i];
+                const set = [setSetPicksP1, setSetPicksP2, setSetPicksP3][i];
+                return (
+                  <label key={label} className="space-y-1 text-sm">
+                    <span className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+                      {label}
+                    </span>
+                    <select
+                      value={val}
+                      onChange={(e) => set(e.target.value)}
+                      className={fieldClass}
+                      style={fieldStyle}
+                    >
+                      <option value="">—</option>
+                      {drivers.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={submitSetPicks}
+            disabled={setPicksLoading}
+            className={`${btnClass} text-white`}
+            style={{ background: "#D97706" }}
+          >
+            {setPicksLoading ? "Saving…" : "Save picks to database"}
+          </button>
+          <StatusMsg status={setPicksStatus} error={setPicksError} />
+        </Section>
+      )}
+
       {/* Test Race */}
-      <Section title="Test / Demo Race">
-        <p className="text-sm text-slate-400">
+      <Section title="Test / demo race">
+        <p className="text-sm" style={{ color: F1.carbonLight }}>
           Create a dummy race to test the full prediction and scoring flow before a live race.
         </p>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => testRaceAction("create")}
             disabled={testLoading !== null}
-            className="rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`${btnClass} text-white`}
+            style={{ background: "#2563EB" }}
           >
             {testLoading === "create" ? "Creating…" : "Create test race"}
           </button>
           <button
             onClick={simulateResults}
             disabled={testLoading !== null}
-            className="rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`${btnClass} text-white`}
+            style={{ background: "#166534" }}
           >
             {testLoading === "simulate" ? "Simulating…" : "Simulate results"}
           </button>
           <button
             onClick={() => testRaceAction("clear")}
             disabled={testLoading !== null}
-            className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={btnClass}
+            style={{ background: F1.white, color: F1.carbon, border: `1px solid ${F1.gridLine}` }}
           >
             {testLoading === "clear" ? "Clearing…" : "Clear test race"}
           </button>
         </div>
         <StatusMsg status={testStatus} error={testError} />
-        <ol className="text-xs text-slate-500 list-decimal list-inside space-y-1">
+        <ol className="list-inside list-decimal space-y-1 text-xs" style={{ color: F1.carbonLight }}>
           <li>Click &quot;Create test race&quot; — it will appear in Make Picks with the window already open</li>
           <li>Submit your own predictions (and ask others to do the same)</li>
           <li>Click &quot;Simulate results&quot; to generate random results and compute scores</li>
@@ -312,27 +498,31 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
 
       {/* Send Reminder Now */}
       {upcomingRaces.length > 0 && (
-        <Section title="Send Reminder Now">
-          <p className="text-sm text-slate-400">
+        <Section title="Send reminder now">
+          <p className="text-sm" style={{ color: F1.carbonLight }}>
             Immediately email all players who haven&apos;t submitted picks for a session.
           </p>
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={reminderRaceId}
-              onChange={e => setReminderRaceId(e.target.value)}
-              className="rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+              onChange={(e) => setReminderRaceId(e.target.value)}
+              className={fieldClass}
+              style={fieldStyle}
             >
-              {upcomingRaces.map(r => (
-                <option key={r.id} value={r.id}>{r.grand_prix}</option>
+              {upcomingRaces.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.grand_prix}
+                </option>
               ))}
             </select>
             <select
               value={reminderEvent}
-              onChange={e => setReminderEvent(e.target.value as "quali" | "sprint" | "race")}
-              className="rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+              onChange={(e) => setReminderEvent(e.target.value as "quali" | "sprint" | "race")}
+              className={fieldClass}
+              style={fieldStyle}
             >
               <option value="quali">Qualifying</option>
-              {upcomingRaces.find(r => r.id === reminderRaceId)?.has_sprint && (
+              {upcomingRaces.find((r) => r.id === reminderRaceId)?.has_sprint && (
                 <option value="sprint">Sprint</option>
               )}
               <option value="race">Race</option>
@@ -340,33 +530,44 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
             <button
               onClick={sendReminderNow}
               disabled={reminderLoading}
-              className="rounded bg-red-600 hover:bg-red-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+              className={`${btnClass} text-white`}
+              style={{ background: F1.red }}
             >
               {reminderLoading ? "Sending…" : "Send reminder emails"}
             </button>
           </div>
-          {reminderStatus && <p className="text-sm text-emerald-400">{reminderStatus}</p>}
-          {reminderError && <p className="text-sm text-red-400">{reminderError}</p>}
+          {reminderStatus && (
+            <p className="text-sm font-medium" style={{ color: "#166534" }}>
+              {reminderStatus}
+            </p>
+          )}
+          {reminderError && (
+            <p className="text-sm font-medium" style={{ color: F1.red }}>
+              {reminderError}
+            </p>
+          )}
         </Section>
       )}
 
       {/* Manual Tools */}
-      <Section title="Manual Tools">
-        <p className="text-xs text-slate-500">
+      <Section title="Manual tools">
+        <p className="text-xs" style={{ color: F1.carbonLight }}>
           Run &quot;Sync Season Calendar&quot; once to populate all races and drivers from OpenF1. After that, results sync automatically.
         </p>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={fixDriverNames}
             disabled={syncLoading !== null}
-            className="rounded bg-yellow-600 hover:bg-yellow-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`${btnClass} text-white`}
+            style={{ background: "#CA8A04" }}
           >
             {syncLoading === "fix-drivers" ? "Fixing…" : "Fix driver names"}
           </button>
           <button
             onClick={testReminder}
             disabled={syncLoading !== null}
-            className="rounded bg-orange-600 hover:bg-orange-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`${btnClass} text-white`}
+            style={{ background: "#EA580C" }}
           >
             {syncLoading === "test-reminder" ? "Sending…" : "Test reminder email"}
           </button>
@@ -375,21 +576,24 @@ export function AdminPanel({ initialPlayers, upcomingRaces = [] }: { initialPlay
           <button
             onClick={() => manualAction("/api/admin/sync-calendar", "Sync calendar")}
             disabled={syncLoading !== null}
-            className="rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`${btnClass} text-white`}
+            style={{ background: "#7C3AED" }}
           >
             {syncLoading === "Sync calendar" ? "Syncing…" : "Sync season calendar"}
           </button>
           <button
             onClick={() => manualAction("/api/admin/sync", "Sync results")}
             disabled={syncLoading !== null}
-            className="rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`${btnClass} text-white`}
+            style={{ background: "#2563EB" }}
           >
             {syncLoading === "Sync results" ? "Syncing…" : "Sync race results"}
           </button>
           <button
             onClick={() => manualAction("/api/admin/recompute", "Recompute")}
             disabled={syncLoading !== null}
-            className="rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-4 py-2 text-sm font-medium transition-colors"
+            className={`${btnClass} text-white`}
+            style={{ background: "#166534" }}
           >
             {syncLoading === "Recompute" ? "Recomputing…" : "Recompute scores"}
           </button>
