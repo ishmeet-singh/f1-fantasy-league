@@ -108,8 +108,7 @@ function SortableSlot({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    touchAction: "none" as const
+    transition
   };
 
   if (isEmpty) {
@@ -147,8 +146,8 @@ function SortableSlot({
       <span
         {...listeners}
         {...attributes}
-        className="cursor-grab px-1 text-lg leading-none active:cursor-grabbing"
-        style={{ color: F1.carbonLight, touchAction: "none" }}
+        className="cursor-grab touch-none px-1 text-lg leading-none active:cursor-grabbing"
+        style={{ color: F1.carbonLight }}
       >
         ⠿
       </span>
@@ -203,26 +202,36 @@ function PoolChip({
   });
 
   return (
-    <button
-      type="button"
+    <span
       ref={setNodeRef}
-      onClick={!isDragging ? onTap : undefined}
-      disabled={disabled}
-      {...listeners}
-      {...attributes}
-      className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex items-center overflow-hidden rounded-full border"
       style={{
         transform: CSS.Translate.toString(transform),
-        touchAction: "none",
         opacity: isDragging ? 0 : 1,
         background: F1.white,
-        color: F1.carbon,
-        border: `1px solid ${F1.gridLine}`
+        borderColor: F1.gridLine
       }}
     >
-      {teamDot(driver.team)}
-      {driver.name}
-    </button>
+      <span
+        {...listeners}
+        {...attributes}
+        className="cursor-grab touch-none self-stretch px-2 py-2 text-sm leading-none active:cursor-grabbing"
+        style={{ color: F1.carbonLight }}
+        aria-hidden
+      >
+        ⠿
+      </span>
+      <button
+        type="button"
+        onClick={!isDragging ? onTap : undefined}
+        disabled={disabled}
+        className="inline-flex items-center gap-1.5 py-2 pr-4 text-sm font-semibold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+        style={{ color: F1.carbon }}
+      >
+        {teamDot(driver.team)}
+        {driver.name}
+      </button>
+    </span>
   );
 }
 
@@ -476,7 +485,7 @@ export function PicksForm({
           <p className="text-xs" style={{ color: F1.carbonLight }}>
             {pool.length > 0 ? "Tap to add · or drag to a slot" : "All drivers picked"}
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 touch-pan-y">
             {pool.map((d) => (
               <PoolChip key={d.id} driver={d} onTap={() => tapAddToPool(d.id)} disabled={allFilled} />
             ))}
