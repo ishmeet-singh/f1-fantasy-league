@@ -11,6 +11,7 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { F1 } from "@/lib/f1-theme";
+import { raceShortCode } from "@/lib/race-short-code";
 import {
   progressiveStandingScores,
   raceStartMapFromWeekends
@@ -29,6 +30,12 @@ const PLAYER_COLORS = [
   "#84cc16",
   "#14b8a6"
 ];
+
+type ChartPoint = {
+  raceCode: string;
+  raceFull: string;
+  [playerName: string]: string | number;
+};
 
 export function FantasyChart({
   history,
@@ -65,8 +72,11 @@ export function FantasyChart({
     completedRaces.map((r) => ({ id: r.raceId, race_start: r.raceStart }))
   );
 
-  const chartData = completedRaces.map((race, raceIdx) => {
-    const point: Record<string, string | number> = { race: raceShortLabel(race.raceName) };
+  const chartData: ChartPoint[] = completedRaces.map((race, raceIdx) => {
+    const point: ChartPoint = {
+      raceCode: raceShortCode(race.raceName),
+      raceFull: race.raceName
+    };
     for (const player of history) {
       const weekends = player.races
         .slice(0, raceIdx + 1)
@@ -95,49 +105,73 @@ export function FantasyChart({
     return bFinal - aFinal;
   });
 
+  const maxScore = Math.max(
+    ...chartData.flatMap((row) =>
+      sorted.map((p) => (typeof row[p.userName] === "number" ? (row[p.userName] as number) : 0))
+    ),
+    1
+  );
+  const yMax = Math.ceil(maxScore / 50) * 50;
+
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke={F1.gridLine} />
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={F1.gridLine} vertical={false} />
         <XAxis
-          dataKey="race"
-          tick={{ fill: F1.carbonLight, fontSize: 10 }}
+          dataKey="raceCode"
+          interval={0}
+          tick={{ fill: F1.carbonMid, fontSize: 10, fontWeight: 600 }}
           axisLine={{ stroke: F1.gridLine }}
           tickLine={false}
-          interval="preserveStartEnd"
+          height={32}
+          tickMargin={6}
         />
         <YAxis
-          tick={{ fill: F1.carbonLight, fontSize: 11 }}
+          width={36}
+          domain={[0, yMax]}
+          tickCount={5}
+          tick={{ fill: F1.carbonLight, fontSize: 10 }}
           axisLine={false}
           tickLine={false}
+          tickFormatter={(v) => String(v)}
         />
         <Tooltip
           contentStyle={{
             background: F1.white,
             border: `1px solid ${F1.gridLine}`,
             borderRadius: "8px",
-            color: F1.carbon
+            color: F1.carbon,
+            fontSize: 12
           }}
-          labelStyle={{ color: F1.carbonMid, fontSize: 12 }}
-          itemStyle={{ fontSize: 12 }}
+          labelFormatter={(_, items) => {
+            const row = items?.[0]?.payload as ChartPoint | undefined;
+            return row?.raceFull ?? "";
+          }}
+          formatter={(value: number, name: string) => [`${value} pts`, name]}
         />
-        <Legend wrapperStyle={{ fontSize: 11, color: F1.carbonMid, paddingTop: 8 }} />
-        {sorted.map((player, i) => (
-          <Line
-            key={player.userId}
-            type="monotone"
-            dataKey={player.userName}
-            stroke={PLAYER_COLORS[i % PLAYER_COLORS.length]}
-            strokeWidth={player.userId === currentUserId ? 2.5 : 1.5}
-            dot={{ r: 3, fill: PLAYER_COLORS[i % PLAYER_COLORS.length] }}
-            activeDot={{ r: 5 }}
-          />
-        ))}
+        <Legend
+          iconType="plainline"
+          iconSize={16}
+          wrapperStyle={{ fontSize: 10, color: F1.carbonMid, paddingTop: 12, lineHeight: "18px" }}
+        />
+        {sorted.map((player, i) => {
+          const isMe = player.userId === currentUserId;
+          const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
+          return (
+            <Line
+              key={player.userId}
+              type="linear"
+              dataKey={player.userName}
+              stroke={color}
+              strokeWidth={isMe ? 2.5 : 1.25}
+              strokeOpacity={isMe ? 1 : 0.5}
+              dot={false}
+              activeDot={isMe ? { r: 4, fill: color, stroke: F1.white, strokeWidth: 2 } : { r: 3, fill: color }}
+              isAnimationActive={false}
+            />
+          );
+        })}
       </LineChart>
     </ResponsiveContainer>
   );
-}
-
-function raceShortLabel(name: string) {
-  return name.replace(/\s*Grand Prix\s*/gi, "").trim().slice(0, 8);
 }
