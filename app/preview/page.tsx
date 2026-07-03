@@ -17,7 +17,7 @@ const DIRECTIONS = [
     href: "/preview/design-c",
     tag: "C",
     title: "Grid Chicane",
-    desc: "Modern livery — soft gradients, pill badges, friendly mobile cards."
+    desc: "F1 red & carbon — soft cards, podium badges, weekend tile grid (refined C)."
   }
 ];
 

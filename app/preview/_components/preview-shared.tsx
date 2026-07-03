@@ -6,12 +6,15 @@ import { useState } from "react";
 export function PreviewScreenNav({
   design,
   screen,
-  onScreen
+  onScreen,
+  accent = "default"
 }: {
   design: string;
   screen: "dashboard" | "picks";
   onScreen: (s: "dashboard" | "picks") => void;
+  accent?: "default" | "f1";
 }) {
+  const activeBg = accent === "f1" ? "bg-[#E10600]" : "bg-zinc-900";
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-lg items-center justify-between gap-2 px-4 py-3">
@@ -27,7 +30,7 @@ export function PreviewScreenNav({
             type="button"
             onClick={() => onScreen(s)}
             className={`flex-1 rounded-lg py-2 text-sm font-medium capitalize transition ${
-              screen === s ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600"
+              screen === s ? `${activeBg} text-white` : "bg-zinc-100 text-zinc-600"
             }`}
           >
             {s}
