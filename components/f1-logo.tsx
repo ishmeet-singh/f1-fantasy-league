@@ -1,31 +1,27 @@
+import Image from "next/image";
+
+const LOGO_ASPECT = 1024 / 357;
+
 type F1LogoProps = {
   className?: string;
-  /** Height in px; width scales from official 187.56:53.03 aspect ratio */
+  /** Height in px; width scales from asset aspect ratio */
   height?: number;
-  /** F letter colour on light backgrounds */
+  /** Kept for API compat — asset uses blend mode on all backgrounds */
   theme?: "light" | "dark";
 };
 
-/** Official-style F1 wordmark (F + red speed marks). */
-export function F1Logo({ className, height = 22, theme = "light" }: F1LogoProps) {
-  const fColor = theme === "dark" ? "#FFFFFF" : "#15151E";
-  const width = (height * 187.56) / 53.03;
+/** Official F1 wordmark (user-provided asset). */
+export function F1Logo({ className, height = 22 }: F1LogoProps) {
+  const width = Math.round(height * LOGO_ASPECT);
 
   return (
-    <svg
+    <Image
+      src="/f1-logo.png"
+      alt="F1"
       width={width}
       height={height}
-      viewBox="0 0 187.56 53.03"
-      className={className}
-      aria-label="F1"
-      role="img"
-    >
-      <path
-        fill="#E10600"
-        d="M44.42 0h29.87L33.19 53.03H3.32L0 44.76h23.87L44.42 0zm55.15 14.96H25.34L9.27 38.07h74.23l16.07-23.11zM187.56 0v53.03h-32.18L187.56 0z"
-      />
-      <path fill={fColor} d="M52.31 0H22.43L0 44.76V53.03h29.88L52.31 0z" />
-    </svg>
+      className={`shrink-0 object-contain object-left mix-blend-lighten${className ? ` ${className}` : ""}`}
+    />
   );
 }
 
