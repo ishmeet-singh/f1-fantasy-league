@@ -6,7 +6,6 @@ import {
   computePointsHistory,
   type WeekendScoreRow
 } from "@/lib/leaderboard-compute";
-import { fetchF1DriverStandings, type F1DriverStanding } from "@/lib/jolpi";
 import type { LeaderboardEntry, PointsHistoryEntry } from "@/lib/data";
 import type { RaceWeekendRow } from "@/lib/cached-reference-data";
 
@@ -16,7 +15,6 @@ export type DashboardPageData = {
   season: { total: number; past: number };
   lastRace: { id: string; grand_prix: string; race_start: string; userScore: number | null } | null;
   history: PointsHistoryEntry[];
-  f1Standings: F1DriverStanding[];
   myNextPicks: {
     event_type: string;
     predicted_position: number;
@@ -64,12 +62,11 @@ function pickLastCompletedRace(
 export async function loadDashboardPage(userId: string | undefined): Promise<DashboardPageData> {
   const supabase = getSupabaseAdmin();
 
-  const [raceWeekends, usersRes, completedRes, weekendsRes, f1Standings] = await Promise.all([
+  const [raceWeekends, usersRes, completedRes, weekendsRes] = await Promise.all([
     getCachedRaceWeekends(),
     supabase.from("users").select("id,display_name,email"),
     supabase.from("results").select("race_id").eq("event_type", "race"),
-    supabase.from("weekend_scores").select("user_id,race_id,total_points,total_error,exact_matches"),
-    fetchF1DriverStandings(new Date().getUTCFullYear())
+    supabase.from("weekend_scores").select("user_id,race_id,total_points,total_error,exact_matches")
   ]);
 
   const users = usersRes.data ?? [];
@@ -102,7 +99,6 @@ export async function loadDashboardPage(userId: string | undefined): Promise<Das
     season,
     lastRace,
     history,
-    f1Standings,
     myNextPicks
   };
 }

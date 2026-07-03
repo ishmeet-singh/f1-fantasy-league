@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { getRequestUser } from "@/lib/request-user";
 import { loadDashboardPage } from "@/lib/loaders/dashboard";
 import { Countdown } from "@/components/countdown";
@@ -6,7 +7,7 @@ import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
 import { LeaderboardFull } from "@/components/leaderboard-full";
 import { FantasyChart } from "@/components/fantasy-chart";
-import { F1Standings } from "@/components/f1-standings";
+import { DashboardF1Standings, F1StandingsSkeleton } from "@/components/dashboard-f1-standings";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,6 @@ export default async function DashboardPage() {
     season,
     lastRace,
     history,
-    f1Standings,
     myNextPicks
   } = await loadDashboardPage(user?.id);
 
@@ -147,16 +147,9 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="card space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold">F1 Driver Championship</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Official {new Date().getUTCFullYear()} standings</p>
-          </div>
-          <span className="text-xs text-slate-600">Top 10</span>
-        </div>
-        <F1Standings standings={f1Standings} />
-      </div>
+      <Suspense fallback={<F1StandingsSkeleton />}>
+        <DashboardF1Standings />
+      </Suspense>
 
     </div>
   );
