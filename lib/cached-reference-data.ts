@@ -13,6 +13,8 @@ export type RaceWeekendRow = {
 
 export type DriverRow = { id: string; name: string; team: string };
 
+export type UserRow = { id: string; display_name: string; email: string };
+
 export type WeekendScoreTotalRow = {
   user_id: string;
   race_id: string;
@@ -63,3 +65,29 @@ export const getCachedWeekendScores = unstable_cache(
 
 /** @alias getCachedWeekendScores */
 export const getCachedWeekendScoreTotals = getCachedWeekendScores;
+
+async function fetchUsersUncached(): Promise<UserRow[]> {
+  const { data } = await getSupabaseAdmin()
+    .from("users")
+    .select("id,display_name,email");
+  return data ?? [];
+}
+
+export const getCachedUsers = unstable_cache(fetchUsersUncached, ["users-v1"], {
+  revalidate: 60
+});
+
+async function fetchRaceCompletionsUncached(): Promise<string[]> {
+  const { data } = await getSupabaseAdmin()
+    .from("results")
+    .select("race_id")
+    .eq("event_type", "race");
+  return (data ?? []).map((r) => r.race_id);
+}
+
+/** Race IDs with a published main-race result — 60s cache, shared with dashboard. */
+export const getCachedRaceCompletions = unstable_cache(
+  fetchRaceCompletionsUncached,
+  ["race-completions-v1"],
+  { revalidate: 60 }
+);
