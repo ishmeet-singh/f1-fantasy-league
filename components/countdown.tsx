@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { F1 } from "@/lib/f1-theme";
 
 function calcParts(target: string) {
   const ms = new Date(target).getTime() - Date.now();
@@ -17,7 +18,15 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
-export function Countdown({ target, label = "Qualifying in" }: { target: string; label?: string }) {
+export function Countdown({
+  target,
+  label = "Qualifying in",
+  variant = "dark"
+}: {
+  target: string;
+  label?: string;
+  variant?: "dark" | "chicane";
+}) {
   const [parts, setParts] = useState(() => calcParts(target));
 
   useEffect(() => {
@@ -26,7 +35,29 @@ export function Countdown({ target, label = "Qualifying in" }: { target: string;
   }, [target]);
 
   if (!parts) {
-    return <span className="text-slate-400 text-sm">Session started</span>;
+    return (
+      <span className="text-sm" style={{ color: variant === "chicane" ? F1.carbonLight : undefined }}>
+        Session started
+      </span>
+    );
+  }
+
+  if (variant === "chicane") {
+    const text =
+      parts.d > 0
+        ? `${parts.d}d ${pad(parts.h)}h ${pad(parts.m)}m`
+        : `${pad(parts.h)}h ${pad(parts.m)}m ${pad(parts.s)}s`;
+
+    return (
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
+          {label}
+        </p>
+        <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight" style={{ color: F1.red }}>
+          {text}
+        </p>
+      </div>
+    );
   }
 
   return (

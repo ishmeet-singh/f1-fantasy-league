@@ -1,9 +1,16 @@
 "use client";
 
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
 } from "recharts";
+import { F1 } from "@/lib/f1-theme";
 
 type PointsEntry = {
   userId: string;
@@ -12,8 +19,16 @@ type PointsEntry = {
 };
 
 const PLAYER_COLORS = [
-  "#ef4444", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7",
-  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6"
+  F1.red,
+  F1.carbonMid,
+  F1.carbonLight,
+  "#22c55e",
+  "#f59e0b",
+  "#a855f7",
+  "#06b6d4",
+  "#ec4899",
+  "#84cc16",
+  "#14b8a6"
 ];
 
 export function FantasyChart({
@@ -25,26 +40,30 @@ export function FantasyChart({
 }) {
   if (!history.length || !history[0]?.races.length) {
     return (
-      <div className="flex items-center justify-center h-40 text-slate-600 text-sm">
+      <div
+        className="flex h-40 items-center justify-center text-sm"
+        style={{ color: F1.carbonLight }}
+      >
         Points chart will appear after the first race
       </div>
     );
   }
 
-  // Build cumulative data: one object per race, each player has cumulative pts
-  const completedRaces = history[0].races.filter(r => r.points !== null);
+  const completedRaces = history[0].races.filter((r) => r.points !== null);
   if (!completedRaces.length) {
     return (
-      <div className="flex items-center justify-center h-40 text-slate-600 text-sm">
+      <div
+        className="flex h-40 items-center justify-center text-sm"
+        style={{ color: F1.carbonLight }}
+      >
         Points chart will appear after the first race
       </div>
     );
   }
 
   const chartData = completedRaces.map((race, raceIdx) => {
-    const point: Record<string, string | number> = { race: race.raceName };
+    const point: Record<string, string | number> = { race: raceShortLabel(race.raceName) };
     for (const player of history) {
-      // Cumulative sum up to this race
       let cum = 0;
       for (let i = 0; i <= raceIdx; i++) {
         cum += player.races[i]?.points ?? 0;
@@ -54,7 +73,6 @@ export function FantasyChart({
     return point;
   });
 
-  // Sort players: current user first, then by final cumulative score
   const sorted = [...history].sort((a, b) => {
     if (a.userId === currentUserId) return -1;
     if (b.userId === currentUserId) return 1;
@@ -65,27 +83,31 @@ export function FantasyChart({
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+      <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={F1.gridLine} />
         <XAxis
           dataKey="race"
-          tick={{ fill: "#64748b", fontSize: 11 }}
-          axisLine={{ stroke: "#1e293b" }}
+          tick={{ fill: F1.carbonLight, fontSize: 10 }}
+          axisLine={{ stroke: F1.gridLine }}
           tickLine={false}
+          interval="preserveStartEnd"
         />
         <YAxis
-          tick={{ fill: "#64748b", fontSize: 11 }}
+          tick={{ fill: F1.carbonLight, fontSize: 11 }}
           axisLine={false}
           tickLine={false}
         />
         <Tooltip
-          contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px" }}
-          labelStyle={{ color: "#94a3b8", fontSize: 12 }}
+          contentStyle={{
+            background: F1.white,
+            border: `1px solid ${F1.gridLine}`,
+            borderRadius: "8px",
+            color: F1.carbon
+          }}
+          labelStyle={{ color: F1.carbonMid, fontSize: 12 }}
           itemStyle={{ fontSize: 12 }}
         />
-        <Legend
-          wrapperStyle={{ fontSize: 11, color: "#94a3b8", paddingTop: 8 }}
-        />
+        <Legend wrapperStyle={{ fontSize: 11, color: F1.carbonMid, paddingTop: 8 }} />
         {sorted.map((player, i) => (
           <Line
             key={player.userId}
@@ -100,4 +122,8 @@ export function FantasyChart({
       </LineChart>
     </ResponsiveContainer>
   );
+}
+
+function raceShortLabel(name: string) {
+  return name.replace(/\s*Grand Prix\s*/gi, "").trim().slice(0, 8);
 }

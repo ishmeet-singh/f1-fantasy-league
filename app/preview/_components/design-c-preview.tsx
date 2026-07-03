@@ -9,7 +9,7 @@ import {
   SEASON,
   STANDINGS_SUBTITLE
 } from "../_data/sample";
-import { F1 } from "../_data/f1-theme";
+import { F1 } from "@/lib/f1-theme";
 import { AppBrand } from "@/components/f1-logo";
 import { MiniLineChart, PreviewScreenNav, usePreviewScreen } from "./preview-shared";
 

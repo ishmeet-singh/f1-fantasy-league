@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { LeaderboardEntry, PointsHistoryEntry } from "@/lib/data";
-
-const MEDALS = ["🥇", "🥈", "🥉"];
+import { F1 } from "@/lib/f1-theme";
+import { raceShortCode } from "@/lib/race-short-code";
 
 export function LeaderboardFull({
   leaderboard,
@@ -21,110 +21,173 @@ export function LeaderboardFull({
   function toggle(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
   if (!leaderboard.length) {
     return (
-      <p className="text-slate-500 text-sm py-6 text-center">
+      <p className="py-6 text-center text-sm" style={{ color: F1.carbonLight }}>
         No scores yet — picks start appearing here after the first race.
       </p>
     );
   }
 
   return (
-    <div className="space-y-1">
+    <ul className="space-y-2">
       {leaderboard.map((entry, i) => {
         const isMe = entry.id === currentUserId;
-        const open = expanded.has(entry.id);
         const playerHistory = historyByUser.get(entry.id);
-        const footerLabel =
-          entry.racesDropped > 0
-            ? `Season total (best ${entry.racesCounting} of ${entry.racesCounting + entry.racesDropped} · ${entry.racesDropped} dropped)`
-            : "Season total";
+        const hasRaces = Boolean(playerHistory?.races.length);
+        const showTiles = isMe || expanded.has(entry.id);
 
         return (
-          <div key={entry.id} className={`rounded-xl overflow-hidden ${isMe ? "ring-1 ring-red-900/50" : ""}`}>
+          <li key={entry.id}>
             <div
-              className={`flex items-center gap-3 px-4 py-3 text-sm cursor-pointer transition-colors ${
-                isMe
-                  ? "bg-red-950/40 hover:bg-red-950/60"
-                  : i % 2 === 0
-                    ? "bg-slate-800/30 hover:bg-slate-800/50"
-                    : "hover:bg-slate-800/30"
-              }`}
-              onClick={() => playerHistory?.races.length && toggle(entry.id)}
+              role={!isMe && hasRaces ? "button" : undefined}
+              tabIndex={!isMe && hasRaces ? 0 : undefined}
+              onClick={!isMe && hasRaces ? () => toggle(entry.id) : undefined}
+              onKeyDown={
+                !isMe && hasRaces
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle(entry.id);
+                      }
+                    }
+                  : undefined
+              }
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${!isMe && hasRaces ? "cursor-pointer" : ""}`}
+              style={{
+                background: isMe ? F1.redLight : F1.offWhite,
+                boxShadow: isMe ? `inset 0 0 0 2px ${F1.red}` : undefined
+              }}
             >
-              <span className="w-7 text-center text-base leading-none shrink-0">
-                {i < 3 ? MEDALS[i] : <span className="text-slate-500 text-xs font-mono">{i + 1}</span>}
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                style={{
+                  background: i < 3 ? F1.podium[i] : F1.carbonMid,
+                  color: i === 0 ? F1.carbon : "#fff"
+                }}
+              >
+                {i + 1}
               </span>
-
-              <span className={`flex-1 min-w-0 font-medium truncate ${isMe ? "text-white" : "text-slate-200"}`}>
-                {entry.name}
-                {isMe && <span className="ml-2 text-xs text-red-400 font-normal">(you)</span>}
-              </span>
-
-              <span className="text-slate-500 text-xs hidden sm:block shrink-0 w-16 text-right">
-                {entry.exact} exact
-              </span>
-
-              <span className="font-mono font-bold text-white shrink-0 w-16 text-right">
-                {entry.score} <span className="text-slate-500 font-normal text-xs">pts</span>
-              </span>
-
-              {playerHistory?.races.length ? (
-                <span className="text-slate-500 text-xs shrink-0 w-4 text-right">{open ? "▲" : "▼"}</span>
-              ) : (
-                <span className="w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold" style={{ color: F1.carbon }}>
+                  {entry.name}
+                  {isMe && (
+                    <span className="ml-1.5 text-xs font-bold uppercase" style={{ color: F1.red }}>
+                      you
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs" style={{ color: F1.carbonLight }}>
+                  {entry.exact} exact
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold tabular-nums" style={{ color: F1.carbon }}>
+                  {entry.score}
+                </p>
+                <p
+                  className="text-[10px] font-medium uppercase tracking-wide"
+                  style={{ color: F1.carbonLight }}
+                >
+                  pts
+                </p>
+              </div>
+              {!isMe && hasRaces && (
+                <span className="shrink-0 text-xs" style={{ color: F1.carbonLight }}>
+                  {expanded.has(entry.id) ? "▲" : "▼"}
+                </span>
               )}
             </div>
 
-            {open && playerHistory && (
-              <div className={`px-4 pb-3 pt-1 ${isMe ? "bg-red-950/20" : "bg-slate-800/20"}`}>
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Points per race</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                  {playerHistory.races.map((r) => (
-                    <div
-                      key={r.raceId}
-                      className={`flex items-center gap-1.5 text-xs ${r.dropped ? "opacity-50" : ""}`}
-                    >
-                      <span className={r.dropped ? "text-slate-600 line-through" : "text-slate-500"}>
-                        {r.raceName}
-                      </span>
-                      <span
-                        className={`font-mono font-semibold ${
-                          r.dropped
-                            ? "text-slate-600 line-through"
-                            : r.points === null
-                              ? "text-slate-700"
-                              : r.points > 0
-                                ? "text-white"
-                                : "text-slate-600"
-                        }`}
-                      >
-                        {r.points === null ? "—" : `${r.points}pt`}
-                      </span>
-                      {r.dropped && (
-                        <span className="text-[10px] uppercase tracking-wide text-slate-600">dropped</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2 pt-2 border-t border-slate-700/50 flex justify-between text-xs">
-                  <span className="text-slate-500">{footerLabel}</span>
-                  <span className="font-bold text-white">{entry.score} pts</span>
-                </div>
-              </div>
+            {showTiles && playerHistory && hasRaces && (
+              <WeekendTiles
+                entry={entry}
+                races={playerHistory.races}
+                isMe={isMe}
+              />
             )}
-          </div>
+          </li>
         );
       })}
+    </ul>
+  );
+}
+
+function WeekendTiles({
+  entry,
+  races,
+  isMe
+}: {
+  entry: LeaderboardEntry;
+  races: PointsHistoryEntry["races"];
+  isMe: boolean;
+}) {
+  return (
+    <div
+      className="mt-3 rounded-xl p-3"
+      style={{
+        background: F1.offWhite,
+        border: `1px solid ${F1.gridLine}`,
+        marginLeft: isMe ? 0 : undefined
+      }}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+          {isMe ? "Your weekends" : `${entry.name}'s weekends`}
+        </p>
+        {entry.racesCounting > 0 && (
+          <span
+            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+            style={{ background: F1.carbon }}
+          >
+            {entry.racesCounting} counting
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+        {races.map((r) => (
+          <div
+            key={r.raceId}
+            className="rounded-lg p-2 text-center"
+            style={{
+              background: r.dropped ? "#EEE" : F1.white,
+              border: r.dropped ? `1px dashed ${F1.carbonLight}` : `1px solid ${F1.gridLine}`,
+              opacity: r.dropped ? 0.65 : 1
+            }}
+          >
+            <p
+              className={`text-[10px] font-bold ${r.dropped ? "line-through" : ""}`}
+              style={{ color: r.dropped ? F1.carbonLight : F1.carbonMid }}
+              title={r.raceName}
+            >
+              {raceShortCode(r.raceName)}
+            </p>
+            <p
+              className={`mt-0.5 text-sm font-bold tabular-nums ${r.dropped ? "line-through" : ""}`}
+              style={{ color: r.dropped ? F1.carbonLight : F1.carbon }}
+            >
+              {r.points === null ? "—" : r.points}
+            </p>
+            {r.dropped && (
+              <p className="mt-0.5 text-[8px] font-bold uppercase" style={{ color: F1.red }}>
+                drop
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-center text-xs" style={{ color: F1.carbonLight }}>
+        Season total{" "}
+        <span className="font-bold" style={{ color: F1.red }}>
+          {entry.score} pts
+        </span>
+      </p>
     </div>
   );
 }
