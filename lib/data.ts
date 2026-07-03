@@ -151,7 +151,7 @@ export async function getF1Championship(): Promise<F1DriverStanding[]> {
 export type PointsHistoryEntry = {
   userId: string;
   userName: string;
-  races: { raceId: string; raceName: string; points: number | null; dropped?: boolean }[];
+  races: { raceId: string; raceName: string; raceStart: string; points: number | null; dropped?: boolean }[];
 };
 
 export async function getPointsHistory(): Promise<PointsHistoryEntry[]> {

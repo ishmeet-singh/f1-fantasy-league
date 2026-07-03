@@ -71,7 +71,7 @@ export function computeUserRank(userId: string, leaderboard: LeaderboardEntry[])
 
 export function computePointsHistory(
   users: UserRow[],
-  races: { id: string; grand_prix: string }[],
+  races: { id: string; grand_prix: string; race_start: string }[],
   weekends: WeekendScoreRow[],
   completedRaceIds: ReadonlySet<string>,
   leaderboard: LeaderboardEntry[]
@@ -89,6 +89,7 @@ export function computePointsHistory(
     races: completedRaces.map((r) => ({
       raceId: r.id,
       raceName: r.grand_prix.replace(" Grand Prix", "").replace("Grand Prix", "").trim(),
+      raceStart: r.race_start,
       points: scoreMap.has(`${u.id}:${r.id}`) ? (scoreMap.get(`${u.id}:${r.id}`) ?? 0) : null,
       dropped: droppedByUser.get(u.id)?.has(r.id) ?? false
     }))

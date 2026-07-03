@@ -6,7 +6,8 @@ import {
   computeSeasonStanding,
   countingWeekendsFor,
   dropsForScoredWeekends,
-  formatSeasonStandingsSubtitle
+  formatSeasonStandingsSubtitle,
+  progressiveStandingScores
 } from "./season-standings";
 
 const raceStarts = new Map([
@@ -175,6 +176,47 @@ describe("computeSeasonStanding", () => {
     expect(result.score).toBe(0);
     expect(new Set(result.droppedRaceIds)).toEqual(new Set(["r1", "r2", "r3", "r4"]));
     expect(new Set(result.countingRaceIds)).toEqual(new Set(["r5", "r6", "r7", "r8"]));
+  });
+});
+
+describe("progressiveStandingScores", () => {
+  it("matches raw sum until drops kick in at 5 weekends", () => {
+    const weekends = [
+      weekend("r1", 100),
+      weekend("r2", 90),
+      weekend("r3", 80),
+      weekend("r4", 70)
+    ];
+    const order = ["r1", "r2", "r3", "r4"];
+    expect(progressiveStandingScores(weekends, order, raceStarts)).toEqual([100, 190, 270, 340]);
+  });
+
+  it("drops worst weekend progressively from race 5 onward", () => {
+    const weekends = [
+      weekend("r1", 100),
+      weekend("r2", 90),
+      weekend("r3", 80),
+      weekend("r4", 70),
+      weekend("r5", 10)
+    ];
+    const order = ["r1", "r2", "r3", "r4", "r5"];
+    expect(progressiveStandingScores(weekends, order, raceStarts)).toEqual([100, 190, 270, 340, 340]);
+  });
+
+  it("keeps best 4 of 8 at full eight-race sample", () => {
+    const weekends = [
+      weekend("r1", 84),
+      weekend("r2", 96),
+      weekend("r3", 84),
+      weekend("r4", 100),
+      weekend("r5", 32),
+      weekend("r6", 76),
+      weekend("r7", 69),
+      weekend("r8", 56)
+    ];
+    const order = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"];
+    const scores = progressiveStandingScores(weekends, order, raceStarts);
+    expect(scores.at(-1)).toBe(364); // 96+100+84+84
   });
 });
 

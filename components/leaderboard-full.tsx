@@ -14,7 +14,9 @@ export function LeaderboardFull({
   history: PointsHistoryEntry[];
   currentUserId: string | null;
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(currentUserId ? [currentUserId] : [])
+  );
 
   const historyByUser = new Map(history.map((h) => [h.userId, h]));
 
@@ -41,16 +43,16 @@ export function LeaderboardFull({
         const isMe = entry.id === currentUserId;
         const playerHistory = historyByUser.get(entry.id);
         const hasRaces = Boolean(playerHistory?.races.length);
-        const showTiles = isMe || expanded.has(entry.id);
+        const open = expanded.has(entry.id);
 
         return (
           <li key={entry.id}>
             <div
-              role={!isMe && hasRaces ? "button" : undefined}
-              tabIndex={!isMe && hasRaces ? 0 : undefined}
-              onClick={!isMe && hasRaces ? () => toggle(entry.id) : undefined}
+              role={hasRaces ? "button" : undefined}
+              tabIndex={hasRaces ? 0 : undefined}
+              onClick={hasRaces ? () => toggle(entry.id) : undefined}
               onKeyDown={
-                !isMe && hasRaces
+                hasRaces
                   ? (e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
@@ -59,7 +61,7 @@ export function LeaderboardFull({
                     }
                   : undefined
               }
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${!isMe && hasRaces ? "cursor-pointer" : ""}`}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${hasRaces ? "cursor-pointer" : ""}`}
               style={{
                 background: isMe ? F1.redLight : F1.offWhite,
                 boxShadow: isMe ? `inset 0 0 0 2px ${F1.red}` : undefined
@@ -98,14 +100,14 @@ export function LeaderboardFull({
                   pts
                 </p>
               </div>
-              {!isMe && hasRaces && (
+              {hasRaces && (
                 <span className="shrink-0 text-xs" style={{ color: F1.carbonLight }}>
-                  {expanded.has(entry.id) ? "▲" : "▼"}
+                  {open ? "▲" : "▼"}
                 </span>
               )}
             </div>
 
-            {showTiles && playerHistory && hasRaces && (
+            {open && playerHistory && hasRaces && (
               <WeekendTiles
                 entry={entry}
                 races={playerHistory.races}

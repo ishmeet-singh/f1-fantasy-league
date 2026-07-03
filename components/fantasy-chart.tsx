@@ -11,12 +11,11 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { F1 } from "@/lib/f1-theme";
-
-type PointsEntry = {
-  userId: string;
-  userName: string;
-  races: { raceId: string; raceName: string; points: number | null }[];
-};
+import {
+  progressiveStandingScores,
+  raceStartMapFromWeekends
+} from "@/lib/season-standings";
+import type { PointsHistoryEntry } from "@/lib/data";
 
 const PLAYER_COLORS = [
   F1.red,
@@ -35,7 +34,7 @@ export function FantasyChart({
   history,
   currentUserId
 }: {
-  history: PointsEntry[];
+  history: PointsHistoryEntry[];
   currentUserId: string | null;
 }) {
   if (!history.length || !history[0]?.races.length) {
@@ -61,14 +60,23 @@ export function FantasyChart({
     );
   }
 
+  const raceOrder = completedRaces.map((r) => r.raceId);
+  const raceStartById = raceStartMapFromWeekends(
+    completedRaces.map((r) => ({ id: r.raceId, race_start: r.raceStart }))
+  );
+
   const chartData = completedRaces.map((race, raceIdx) => {
     const point: Record<string, string | number> = { race: raceShortLabel(race.raceName) };
     for (const player of history) {
-      let cum = 0;
-      for (let i = 0; i <= raceIdx; i++) {
-        cum += player.races[i]?.points ?? 0;
-      }
-      point[player.userName] = cum;
+      const weekends = player.races
+        .slice(0, raceIdx + 1)
+        .filter((r) => r.points !== null)
+        .map((r) => ({
+          race_id: r.raceId,
+          total_points: r.points
+        }));
+      const scores = progressiveStandingScores(weekends, raceOrder.slice(0, raceIdx + 1), raceStartById);
+      point[player.userName] = scores[scores.length - 1] ?? 0;
     }
     return point;
   });
@@ -76,8 +84,14 @@ export function FantasyChart({
   const sorted = [...history].sort((a, b) => {
     if (a.userId === currentUserId) return -1;
     if (b.userId === currentUserId) return 1;
-    const aFinal = completedRaces.reduce((s, _, i) => s + (a.races[i]?.points ?? 0), 0);
-    const bFinal = completedRaces.reduce((s, _, i) => s + (b.races[i]?.points ?? 0), 0);
+    const aWeekends = a.races
+      .filter((r) => r.points !== null)
+      .map((r) => ({ race_id: r.raceId, total_points: r.points }));
+    const bWeekends = b.races
+      .filter((r) => r.points !== null)
+      .map((r) => ({ race_id: r.raceId, total_points: r.points }));
+    const aFinal = progressiveStandingScores(aWeekends, raceOrder, raceStartById).at(-1) ?? 0;
+    const bFinal = progressiveStandingScores(bWeekends, raceOrder, raceStartById).at(-1) ?? 0;
     return bFinal - aFinal;
   });
 

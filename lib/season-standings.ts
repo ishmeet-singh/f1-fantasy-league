@@ -99,6 +99,19 @@ export function formatSeasonStandingsSubtitle(completedRaces: number): string {
   return `Best ${counting} of ${completedRaces} counting · worst ${drops} dropped`;
 }
 
+/** Standing score after each race in calendar order (progressive best-N drops). */
+export function progressiveStandingScores(
+  weekends: WeekendStandingInput[],
+  raceOrder: string[],
+  raceStartById: ReadonlyMap<string, string>
+): number[] {
+  return raceOrder.map((_, idx) => {
+    const through = new Set(raceOrder.slice(0, idx + 1));
+    const subset = weekends.filter((w) => through.has(w.race_id));
+    return computeSeasonStanding(subset, raceStartById).score;
+  });
+}
+
 export function raceStartMapFromWeekends(
   races: ReadonlyArray<{ id: string; race_start: string }>
 ): Map<string, string> {

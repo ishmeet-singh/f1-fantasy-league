@@ -149,7 +149,7 @@ export default async function DashboardPage() {
           Progression
         </h2>
         <p className="mt-0.5 text-xs" style={{ color: F1.carbonLight }}>
-          Raw cumulative points per race (standings use best-N with drops)
+          Counting standings after each race (same best-N drop rules as leaderboard)
         </p>
         <div className="mt-3">
           <FantasyChart history={history} currentUserId={user?.id ?? null} />

@@ -92,11 +92,11 @@ describe("computeUserRank", () => {
 describe("computePointsHistory", () => {
   it("builds per-race points only for completed races and marks dropped", () => {
     const raceList = [
-      { id: "r1", grand_prix: "Bahrain Grand Prix" },
-      { id: "r2", grand_prix: "Saudi Arabian Grand Prix" },
-      { id: "r3", grand_prix: "Australian Grand Prix" },
-      { id: "r4", grand_prix: "Japanese Grand Prix" },
-      { id: "r5", grand_prix: "Chinese Grand Prix" }
+      { id: "r1", grand_prix: "Bahrain Grand Prix", race_start: "2026-03-01T12:00:00Z" },
+      { id: "r2", grand_prix: "Saudi Arabian Grand Prix", race_start: "2026-03-08T12:00:00Z" },
+      { id: "r3", grand_prix: "Australian Grand Prix", race_start: "2026-03-15T12:00:00Z" },
+      { id: "r4", grand_prix: "Japanese Grand Prix", race_start: "2026-03-22T12:00:00Z" },
+      { id: "r5", grand_prix: "Chinese Grand Prix", race_start: "2026-03-29T12:00:00Z" }
     ];
     const weekends: WeekendScoreRow[] = [
       { user_id: "u1", race_id: "r1", total_points: 100, total_error: 0, exact_matches: 0 },
