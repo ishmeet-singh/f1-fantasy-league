@@ -2,6 +2,7 @@
 
 import { F1 } from "@/lib/f1-theme";
 import { useRaceNav } from "@/lib/use-race-nav";
+import { useScrollRacePill } from "@/lib/use-scroll-race-pill";
 
 type RaceItem = {
   id: string;
@@ -23,15 +24,21 @@ export function ResultsRaceSelector({
   selectedRaceId: string;
 }) {
   const { navigate, pendingRaceId, isNavigating } = useRaceNav(selectedRaceId);
+  const { containerRef, selectedRef } = useScrollRacePill(selectedRaceId);
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1" style={{ opacity: isNavigating ? 0.85 : 1 }}>
+    <div
+      ref={containerRef}
+      className="flex gap-2 overflow-x-auto pb-1 scroll-smooth"
+      style={{ opacity: isNavigating ? 0.85 : 1 }}
+    >
       {races.map((r) => {
         const selected = r.id === selectedRaceId;
         const loading = pendingRaceId === r.id;
         return (
           <button
             key={r.id}
+            ref={selected ? selectedRef : undefined}
             type="button"
             onClick={() => navigate(r.id)}
             disabled={loading}
