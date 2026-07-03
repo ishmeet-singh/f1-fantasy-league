@@ -1,17 +1,28 @@
+import { Suspense } from "react";
 import { RaceWeekendResults } from "@/components/race-weekend-results";
+import { RacePageSkeleton } from "@/components/race-page-skeleton";
 import { getRequestUser } from "@/lib/request-user";
 import { loadResultsPage } from "@/lib/loaders/results";
 import { F1 } from "@/lib/f1-theme";
 
 export const dynamic = "force-dynamic";
 
-export default async function ResultsPage({
+export default function ResultsPage({
   searchParams
 }: {
   searchParams: { race?: string };
 }) {
+  const raceKey = searchParams.race ?? "";
+  return (
+    <Suspense key={raceKey} fallback={<RacePageSkeleton variant="results" />}>
+      <ResultsPageContent raceId={searchParams.race} />
+    </Suspense>
+  );
+}
+
+async function ResultsPageContent({ raceId }: { raceId?: string }) {
   const user = getRequestUser();
-  const data = await loadResultsPage(user?.id ?? null, searchParams.race);
+  const data = await loadResultsPage(user?.id ?? null, raceId);
 
   if (!data) {
     return (

@@ -1,8 +1,7 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
 import { F1 } from "@/lib/f1-theme";
-import type { Route } from "next";
+import { useRaceNav } from "@/lib/use-race-nav";
 
 type RaceItem = {
   id: string;
@@ -23,24 +22,21 @@ export function PicksRaceSelector({
   races: RaceItem[];
   selectedRaceId: string;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-
-  function select(raceId: string) {
-    router.push(`${pathname}?race=${raceId}` as Route);
-  }
+  const { navigate, pendingRaceId, isNavigating } = useRaceNav(selectedRaceId);
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1">
+    <div className="flex gap-2 overflow-x-auto pb-1" style={{ opacity: isNavigating ? 0.85 : 1 }}>
       {races.map((r) => {
         const selected = r.id === selectedRaceId;
         const open = r.isWindowOpen && !r.isRaceDone;
+        const loading = pendingRaceId === r.id;
         return (
           <button
             key={r.id}
             type="button"
-            onClick={() => select(r.id)}
-            className="shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition active:opacity-80"
+            onClick={() => navigate(r.id)}
+            disabled={loading}
+            className="relative shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition active:opacity-80 disabled:cursor-wait"
             style={
               selected
                 ? { background: F1.red, borderColor: F1.red, color: F1.white }
@@ -53,8 +49,13 @@ export function PicksRaceSelector({
           >
             <span className="block text-[10px] font-bold opacity-70">R{r.round}</span>
             <span className="block max-w-[72px] text-center leading-tight">{shortGP(r.grand_prix)}</span>
-            {open && !selected && (
-              <span className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full" style={{ background: F1.red }} />
+            {loading ? (
+              <span className="mx-auto mt-1 block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70" />
+            ) : (
+              open &&
+              !selected && (
+                <span className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full" style={{ background: F1.red }} />
+              )
             )}
           </button>
         );

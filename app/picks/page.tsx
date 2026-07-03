@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import { PicksForm } from "@/components/picks-form";
 import { PicksRaceSelector } from "@/components/picks-race-selector";
 import { LeaguePicks } from "@/components/league-picks";
 import { Countdown } from "@/components/countdown";
 import { LocalTime } from "@/components/local-time";
+import { RacePageSkeleton } from "@/components/race-page-skeleton";
 import { SESSION_OPTS } from "@/lib/date-formats";
 import { getRequestUser } from "@/lib/request-user";
 import { loadPicksPage, buildLeaguePicksForEvent } from "@/lib/loaders/picks";
@@ -38,7 +40,7 @@ function pickCount(rows: { event_type: string }[], eventType: EventType, require
   return rows.filter((p) => p.event_type === eventType).length >= required;
 }
 
-export default async function PicksPage({
+export default function PicksPage({
   searchParams
 }: {
   searchParams: { race?: string };
@@ -46,11 +48,20 @@ export default async function PicksPage({
   const user = getRequestUser();
   if (!user) redirect("/");
 
-  let data = await loadPicksPage(user.id, searchParams.race);
+  const raceKey = searchParams.race ?? "";
+  return (
+    <Suspense key={raceKey} fallback={<RacePageSkeleton variant="picks" />}>
+      <PicksPageContent userId={user.id} raceId={searchParams.race} />
+    </Suspense>
+  );
+}
+
+async function PicksPageContent({ userId, raceId }: { userId: string; raceId?: string }) {
+  let data = await loadPicksPage(userId, raceId);
   if (!data) {
     try {
       await syncCalendar();
-      data = await loadPicksPage(user.id, searchParams.race);
+      data = await loadPicksPage(userId, raceId);
     } catch (err) {
       console.error("Auto calendar sync failed:", err);
     }
@@ -251,7 +262,7 @@ export default async function PicksPage({
                   <div className="mt-2">
                     <LeaguePicks
                       variant="chicane"
-                      players={buildLeaguePicksForEvent(eventType, user.id, allUsers, allPickRows)}
+                      players={buildLeaguePicksForEvent(eventType, userId, allUsers, allPickRows)}
                       results={resultsForEvent(eventType)}
                     />
                   </div>
