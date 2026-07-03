@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
 import { LoginForm } from "@/components/login-form";
 import { HashAuthHandler } from "@/components/hash-auth-handler";
 import { AppBrand } from "@/components/f1-logo";
@@ -9,13 +7,6 @@ export default async function Home({
 }: {
   searchParams: { error?: string };
 }) {
-  const supabase = createServerSupabase();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (user) redirect("/dashboard");
-
   const linkExpired = searchParams.error === "link_expired";
 
   return (
