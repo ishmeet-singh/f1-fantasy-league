@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getRequestUser } from "@/lib/request-user";
 import { loadDashboardPage } from "@/lib/loaders/dashboard";
+import { perfLog } from "@/lib/perf-investigate";
 import { Countdown } from "@/components/countdown";
 import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
@@ -12,6 +13,7 @@ import { DashboardF1Standings, F1StandingsSkeleton } from "@/components/dashboar
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const pageStart = performance.now();
   const user = getRequestUser();
   const {
     leaderboard,
@@ -21,6 +23,11 @@ export default async function DashboardPage() {
     history,
     myNextPicks
   } = await loadDashboardPage(user?.id);
+
+  perfLog("dashboard_page_shell", {
+    pathname: "/dashboard",
+    shellMs: Math.round(performance.now() - pageStart)
+  });
 
   const totalPicksSubmitted = myNextPicks.length;
   const WINDOW_HOURS = 48;

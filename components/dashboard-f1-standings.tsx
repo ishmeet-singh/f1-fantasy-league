@@ -1,5 +1,6 @@
 import { fetchF1DriverStandings } from "@/lib/jolpi";
 import { F1Standings } from "@/components/f1-standings";
+import { perfLog, timeAsync } from "@/lib/perf-investigate";
 
 export function F1StandingsSkeleton() {
   return (
@@ -27,7 +28,10 @@ export function F1StandingsSkeleton() {
 }
 
 export async function DashboardF1Standings() {
-  const standings = await fetchF1DriverStandings(new Date().getUTCFullYear());
+  const { result: standings, ms } = await timeAsync("jolpi_driver_standings", () =>
+    fetchF1DriverStandings(new Date().getUTCFullYear())
+  );
+  perfLog("dashboard_f1_standings_stream", { ms });
 
   return (
     <div className="card space-y-3">
