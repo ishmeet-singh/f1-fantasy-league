@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import type { Route } from "next";
 import { isSprintWeekend } from "@/lib/race-weekend";
 import { resolveDriverDisplayName } from "@/lib/driver-crossref";
 import { pointsForDiff } from "@/lib/scoring";
+import { F1 } from "@/lib/f1-theme";
+import { ResultsRaceSelector } from "@/components/results-race-selector";
 import type { EventType } from "@/lib/types";
 
 type TabId = "quali" | "sprint" | "race";
@@ -26,27 +26,59 @@ type Props = {
 };
 
 const TEAM_COLORS: Record<string, string> = {
-  "McLaren": "bg-orange-500", "Red Bull": "bg-blue-700", "Red Bull Racing": "bg-blue-700",
-  "Ferrari": "bg-red-600", "Mercedes": "bg-teal-500", "Aston Martin": "bg-emerald-700",
-  "Alpine F1 Team": "bg-pink-500", "Alpine": "bg-pink-500", "Williams": "bg-sky-500",
-  "Racing Bulls": "bg-indigo-500", "RB F1 Team": "bg-indigo-500",
-  "Haas F1 Team": "bg-slate-400", "Haas": "bg-slate-400",
-  "Sauber": "bg-lime-500", "Kick Sauber": "bg-lime-500",
+  McLaren: "bg-orange-500",
+  "Red Bull": "bg-blue-700",
+  "Red Bull Racing": "bg-blue-700",
+  Ferrari: "bg-red-600",
+  Mercedes: "bg-teal-500",
+  "Aston Martin": "bg-emerald-700",
+  "Alpine F1 Team": "bg-pink-500",
+  Alpine: "bg-pink-500",
+  Williams: "bg-sky-500",
+  "Racing Bulls": "bg-indigo-500",
+  "RB F1 Team": "bg-indigo-500",
+  "Haas F1 Team": "bg-slate-400",
+  Haas: "bg-slate-400",
+  Sauber: "bg-lime-500",
+  "Kick Sauber": "bg-lime-500"
 };
 
+const EXACT_BG = "#ECFDF5";
+const EXACT_TEXT = "#166534";
+
 function teamDot(team: string) {
-  return <span className={`inline-block w-2 h-2 rounded-full ${TEAM_COLORS[team] ?? "bg-slate-600"} shrink-0`} />;
+  return (
+    <span
+      className={`inline-block h-2 w-2 shrink-0 rounded-full ${TEAM_COLORS[team] ?? "bg-slate-600"}`}
+    />
+  );
 }
 
-function shortGP(name: string) {
-  return name.replace(" Grand Prix", "").replace("Grand Prix", "").trim();
+function posBadge(slotIdx: number) {
+  const bg = slotIdx < 3 ? F1.podium[slotIdx] : F1.carbonMid;
+  const color = slotIdx === 0 ? F1.carbon : "#fff";
+  return (
+    <span
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold"
+      style={{ background: bg, color }}
+    >
+      P{slotIdx + 1}
+    </span>
+  );
 }
 
-// Session card: shows my picks vs actual results for one event
 function SessionCard({
-  eventType, label, results, myPicks, myScore, sessionLocked, driverNames, hasSprint
+  eventType,
+  label,
+  results,
+  myPicks,
+  myScore,
+  sessionLocked,
+  driverNames,
+  hasSprint
 }: {
-  eventType: TabId; label: string;
+  eventType: TabId;
+  label: string;
   results: ResultRow[];
   myPicks: Record<string, number>;
   myScore: { points: number; exact: number } | null;
@@ -56,12 +88,9 @@ function SessionCard({
 }) {
   const [showFull, setShowFull] = useState(false);
 
-  const actualPos = new Map(results.map(r => [r.driver_id, r.actual_position]));
-  const actualDriver = new Map(results.map(r => [r.driver_id, r]));
+  const actualPos = new Map(results.map((r) => [r.driver_id, r.actual_position]));
+  const actualDriver = new Map(results.map((r) => [r.driver_id, r]));
 
-  // My picks as rows
-  // Name lookup priority: 1) full driverNames map (all drivers in DB)
-  // 2) actualDriver (only result drivers) 3) raw ID as last resort
   const myPickRows = Object.entries(myPicks)
     .map(([driverId, predictedPos]) => {
       const actual = actualPos.get(driverId) ?? null;
@@ -83,53 +112,89 @@ function SessionCard({
   const weekendTotal = myScore?.points ?? null;
 
   return (
-    <div className="card p-0 flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+    <section className="flex flex-col overflow-hidden rounded-2xl bg-white" style={{ boxShadow: F1.cardShadow }}>
+      <div
+        className="flex items-center justify-between gap-2 px-4 py-3"
+        style={{ borderBottom: `1px solid ${F1.gridLine}` }}
+      >
         <div>
-          <p className="font-semibold text-sm">{label}</p>
+          <p className="font-bold text-sm" style={{ color: F1.carbon }}>
+            {label}
+          </p>
           {myScore && myScore.points > 0 && (
-            <p className="text-xs text-emerald-400 mt-0.5">{myScore.points} pts · {myScore.exact} exact</p>
+            <p className="mt-0.5 text-xs font-medium" style={{ color: EXACT_TEXT }}>
+              {myScore.points} pts · {myScore.exact} exact
+            </p>
           )}
         </div>
         {hasResults && hasMyPicks && (
-          <button onClick={() => setShowFull(v => !v)} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
-            {showFull ? "My picks ↑" : "Full results ↓"}
+          <button
+            type="button"
+            onClick={() => setShowFull((v) => !v)}
+            className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition active:opacity-80"
+            style={{ background: F1.offWhite, color: F1.carbonMid }}
+          >
+            {showFull ? "My picks" : "Full results"}
           </button>
         )}
       </div>
 
-      {/* Content */}
       {!hasResults && !hasMyPicks ? (
-        <div className="px-4 py-6 text-center text-slate-600 text-xs">
+        <div className="px-4 py-6 text-center text-xs" style={{ color: F1.carbonLight }}>
           {sessionLocked ? "No results yet" : "Not started"}
         </div>
       ) : showFull && hasResults ? (
-        // Full results view
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[260px]">
-            <thead><tr className="border-b border-slate-800 text-xs text-slate-500 uppercase text-left">
-              <th className="px-4 py-2">Pos</th>
-              <th className="px-4 py-2">Driver</th>
-              {Object.keys(myPicks).length > 0 && <th className="px-4 py-2 text-right">Pick</th>}
-            </tr></thead>
+          <table className="w-full min-w-[260px] text-sm">
+            <thead>
+              <tr className="text-left text-[10px] font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
+                <th className="px-4 py-2">Pos</th>
+                <th className="px-4 py-2">Driver</th>
+                {Object.keys(myPicks).length > 0 && <th className="px-4 py-2 text-right">Pick</th>}
+              </tr>
+            </thead>
             <tbody>
               {results.map((r, i) => {
                 const myP = myPicks[r.driver_id];
                 const exact = myP !== undefined && myP === r.actual_position;
                 return (
-                  <tr key={r.driver_id} className={`border-t border-slate-800/50 ${exact ? "bg-emerald-950/20" : i % 2 ? "bg-slate-800/20" : ""}`}>
-                    <td className="px-4 py-2 font-mono text-slate-300 text-xs">P{r.actual_position}</td>
+                  <tr
+                    key={r.driver_id}
+                    style={{
+                      borderTop: `1px solid ${F1.gridLine}`,
+                      background: exact ? EXACT_BG : i % 2 ? F1.offWhite : F1.white
+                    }}
+                  >
+                    <td className="px-4 py-2 font-mono text-xs" style={{ color: F1.carbonMid }}>
+                      P{r.actual_position}
+                    </td>
                     <td className="px-4 py-2">
-                      <div className="flex items-center gap-1.5">{teamDot(r.driver_team)}<span className="text-sm">{r.driver_name}</span></div>
+                      <div className="flex items-center gap-1.5">
+                        {teamDot(r.driver_team)}
+                        <span className="text-sm" style={{ color: F1.carbon }}>
+                          {r.driver_name}
+                        </span>
+                      </div>
                     </td>
                     {Object.keys(myPicks).length > 0 && (
                       <td className="px-4 py-2 text-right">
                         {myP !== undefined ? (
-                          <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${exact ? "bg-emerald-900/50 text-emerald-300" : "bg-slate-800 text-slate-400"}`}>
-                            P{myP}{exact ? " ✓" : ` +${Math.abs(myP - r.actual_position)}`}
+                          <span
+                            className="rounded px-1.5 py-0.5 font-mono text-xs font-semibold"
+                            style={
+                              exact
+                                ? { background: EXACT_BG, color: EXACT_TEXT }
+                                : { background: F1.offWhite, color: F1.carbonMid }
+                            }
+                          >
+                            P{myP}
+                            {exact ? " ✓" : ` +${Math.abs(myP - r.actual_position)}`}
                           </span>
-                        ) : <span className="text-slate-700 text-xs">—</span>}
+                        ) : (
+                          <span className="text-xs" style={{ color: F1.carbonLight }}>
+                            —
+                          </span>
+                        )}
                       </td>
                     )}
                   </tr>
@@ -139,35 +204,64 @@ function SessionCard({
           </table>
         </div>
       ) : hasMyPicks ? (
-        // My picks view (default when picks exist)
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[240px]">
-            <thead><tr className="border-b border-slate-800 text-xs text-slate-500 uppercase text-left">
-              <th className="px-4 py-2">My pick</th>
-              <th className="px-4 py-2">Driver</th>
-              <th className="px-4 py-2 text-center">Actual</th>
-              <th className="px-4 py-2 text-right">Pts</th>
-            </tr></thead>
+          <table className="w-full min-w-[240px] text-sm">
+            <thead>
+              <tr className="text-left text-[10px] font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
+                <th className="px-4 py-2">My pick</th>
+                <th className="px-4 py-2">Driver</th>
+                <th className="px-4 py-2 text-center">Actual</th>
+                <th className="px-4 py-2 text-right">Pts</th>
+              </tr>
+            </thead>
             <tbody>
               {myPickRows.map((p, i) => {
                 const exact = p.diff === 0;
                 return (
-                  <tr key={p.driverId} className={`border-t border-slate-800/50 ${exact ? "bg-emerald-950/20" : i % 2 ? "bg-slate-800/20" : ""}`}>
-                    <td className="px-4 py-2 font-mono text-slate-500 text-xs">P{p.predictedPos}</td>
+                  <tr
+                    key={p.driverId}
+                    style={{
+                      borderTop: `1px solid ${F1.gridLine}`,
+                      background: exact ? EXACT_BG : i % 2 ? F1.offWhite : F1.white
+                    }}
+                  >
                     <td className="px-4 py-2">
-                      <div className="flex items-center gap-1.5">{teamDot(p.driverTeam)}<span>{p.driverName}</span></div>
+                      {posBadge(p.predictedPos - 1)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-1.5">
+                        {teamDot(p.driverTeam)}
+                        <span style={{ color: F1.carbon }}>{p.driverName}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-2 text-center">
                       {p.actual !== null ? (
-                        <span className={`font-mono text-xs font-bold ${exact ? "text-emerald-400" : "text-slate-300"}`}>
-                          P{p.actual}{exact ? " ✓" : ""}
+                        <span
+                          className="font-mono text-xs font-bold"
+                          style={{ color: exact ? EXACT_TEXT : F1.carbon }}
+                        >
+                          P{p.actual}
+                          {exact ? " ✓" : ""}
                         </span>
-                      ) : <span className="text-slate-600 text-xs">{hasResults ? "Not classified" : "—"}</span>}
+                      ) : (
+                        <span className="text-xs" style={{ color: F1.carbonLight }}>
+                          {hasResults ? "Not classified" : "—"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-right">
                       {p.pts !== null ? (
-                        <span className={`text-xs font-semibold ${p.pts > 0 ? "text-white" : "text-slate-600"}`}>{p.pts}pt</span>
-                      ) : <span className="text-slate-600 text-xs">—</span>}
+                        <span
+                          className="text-xs font-semibold"
+                          style={{ color: p.pts > 0 ? F1.carbon : F1.carbonLight }}
+                        >
+                          {p.pts}pt
+                        </span>
+                      ) : (
+                        <span className="text-xs" style={{ color: F1.carbonLight }}>
+                          —
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -176,15 +270,27 @@ function SessionCard({
           </table>
         </div>
       ) : hasResults ? (
-        // No picks but results exist
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[200px]">
+          <table className="w-full min-w-[200px] text-sm">
             <tbody>
               {results.map((r, i) => (
-                <tr key={r.driver_id} className={`border-t border-slate-800/50 ${i % 2 ? "bg-slate-800/20" : ""}`}>
-                  <td className="px-4 py-2 font-mono text-slate-500 text-xs w-10">P{r.actual_position}</td>
+                <tr
+                  key={r.driver_id}
+                  style={{
+                    borderTop: `1px solid ${F1.gridLine}`,
+                    background: i % 2 ? F1.offWhite : F1.white
+                  }}
+                >
+                  <td className="w-10 px-4 py-2 font-mono text-xs" style={{ color: F1.carbonMid }}>
+                    P{r.actual_position}
+                  </td>
                   <td className="px-4 py-2">
-                    <div className="flex items-center gap-1.5">{teamDot(r.driver_team)}<span className="text-sm">{r.driver_name}</span></div>
+                    <div className="flex items-center gap-1.5">
+                      {teamDot(r.driver_team)}
+                      <span className="text-sm" style={{ color: F1.carbon }}>
+                        {r.driver_name}
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -193,20 +299,26 @@ function SessionCard({
         </div>
       ) : null}
 
-      {/* Weekend total for this session */}
       {weekendTotal !== null && weekendTotal > 0 && (
-        <div className="px-4 py-2 border-t border-slate-800 mt-auto">
-          <span className="text-xs text-slate-500">Session total: </span>
-          <span className="text-sm font-bold text-red-400">{weekendTotal} pts</span>
+        <div className="mt-auto px-4 py-2" style={{ borderTop: `1px solid ${F1.gridLine}` }}>
+          <span className="text-xs" style={{ color: F1.carbonLight }}>
+            Session total:{" "}
+          </span>
+          <span className="text-sm font-bold" style={{ color: F1.red }}>
+            {weekendTotal} pts
+          </span>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-// League table with expandable rows
 function LeagueTable({
-  players, resultsByEvent, hasSprint, sessionLocked, currentUserId
+  players,
+  resultsByEvent,
+  hasSprint,
+  sessionLocked,
+  currentUserId
 }: {
   players: LeaguePlayer[];
   resultsByEvent: Record<TabId, ResultRow[]>;
@@ -215,22 +327,24 @@ function LeagueTable({
   currentUserId: string | null;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const visibleEvents = hasSprint ? ["quali", "sprint", "race"] as TabId[] : ["quali", "race"] as TabId[];
+  const visibleEvents = hasSprint
+    ? (["quali", "sprint", "race"] as TabId[])
+    : (["quali", "race"] as TabId[]);
 
-  // Only show league table after at least one session is locked
   if (!Object.values(sessionLocked).some(Boolean)) return null;
   if (players.length === 0) return null;
 
   const actualPos = new Map<string, Map<string, number>>();
   for (const et of visibleEvents) {
-    const m = new Map(resultsByEvent[et].map(r => [r.driver_id, r.actual_position]));
+    const m = new Map(resultsByEvent[et].map((r) => [r.driver_id, r.actual_position]));
     actualPos.set(et, m);
   }
 
   function toggle(id: string) {
-    setExpanded(prev => {
+    setExpanded((prev) => {
       const n = new Set(prev);
-      if (n.has(id)) { n.delete(id); } else { n.add(id); }
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   }
@@ -244,69 +358,114 @@ function LeagueTable({
   const labels: Record<TabId, string> = { quali: "Qualifying", sprint: "Sprint", race: "Race" };
 
   return (
-    <div className="card p-0">
-      <div className="px-4 py-3 border-b border-slate-800">
-        <p className="font-semibold text-sm">League · This Race</p>
-          <p className="text-xs text-slate-500 mt-0.5">Click a player to see their picks (revealed after session locks)</p>
+    <section className="overflow-hidden rounded-2xl bg-white" style={{ boxShadow: F1.cardShadow }}>
+      <div className="px-4 py-3" style={{ borderBottom: `1px solid ${F1.gridLine}` }}>
+        <p className="font-bold text-sm" style={{ color: F1.carbon }}>
+          League · this race
+        </p>
+        <p className="mt-0.5 text-xs" style={{ color: F1.carbonLight }}>
+          Tap a player to see picks (revealed after session locks)
+        </p>
       </div>
-      <div className="divide-y divide-slate-800/50">
+      <div>
         {sorted.map((player, i) => {
           const isMe = player.userId === currentUserId;
           const weekend = visibleEvents.reduce((s, et) => s + (player.scores[et] ?? 0), 0);
           const open = expanded.has(player.userId);
 
           return (
-            <div key={player.userId} className={isMe ? "bg-red-950/20" : ""}>
-              {/* Row */}
-              <div
+            <div key={player.userId} style={{ borderTop: `1px solid ${F1.gridLine}` }}>
+              <button
+                type="button"
                 onClick={() => toggle(player.userId)}
-                className="flex items-center gap-3 px-4 py-3 text-sm cursor-pointer hover:bg-slate-800/30 transition-colors"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition active:opacity-80"
+                style={
+                  isMe
+                    ? { background: F1.redLight, borderLeft: `3px solid ${F1.red}` }
+                    : { background: F1.white }
+                }
               >
-                <span className="text-slate-500 text-xs w-4 shrink-0">{i + 1}</span>
-                <span className={`flex-1 min-w-0 font-medium truncate ${isMe ? "text-white" : "text-slate-200"}`}>
-                  {player.userName}{isMe && <span className="ml-1.5 text-xs text-red-400">(you)</span>}
+                <span
+                  className="w-5 shrink-0 text-xs font-bold tabular-nums"
+                  style={{ color: i < 3 ? F1.podium[i] : F1.carbonLight }}
+                >
+                  {i + 1}
                 </span>
-                {/* Per-event scores */}
-                <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500">
-                  {visibleEvents.map(et => (
-                    <span key={et}>{labels[et][0]}: <span className="text-slate-300">{player.scores[et] ?? "—"}</span></span>
+                <span
+                  className="min-w-0 flex-1 truncate font-semibold"
+                  style={{ color: F1.carbon }}
+                >
+                  {player.userName}
+                  {isMe && (
+                    <span className="ml-1.5 text-xs font-bold" style={{ color: F1.red }}>
+                      (you)
+                    </span>
+                  )}
+                </span>
+                <div className="hidden items-center gap-3 text-xs sm:flex" style={{ color: F1.carbonLight }}>
+                  {visibleEvents.map((et) => (
+                    <span key={et}>
+                      {labels[et][0]}:{" "}
+                      <span className="font-semibold" style={{ color: F1.carbon }}>
+                        {player.scores[et] ?? "—"}
+                      </span>
+                    </span>
                   ))}
                 </div>
-                <span className="font-mono font-bold text-white shrink-0 ml-2">{weekend}pt</span>
-                <span className="text-slate-600 text-xs w-3">{open ? "▲" : "▼"}</span>
-              </div>
+                <span className="shrink-0 font-mono text-sm font-bold tabular-nums" style={{ color: F1.red }}>
+                  {weekend}pt
+                </span>
+                <span className="w-3 shrink-0 text-xs" style={{ color: F1.carbonLight }}>
+                  {open ? "▲" : "▼"}
+                </span>
+              </button>
 
-              {/* Expanded picks */}
               {open && (
-                <div className={`px-4 pb-4 pt-1 ${isMe ? "bg-red-950/10" : "bg-slate-900/30"}`}>
+                <div className="px-4 pb-4 pt-1" style={{ background: F1.offWhite }}>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {visibleEvents.filter(et => sessionLocked[et]).map(et => {
-                      const eventPicks = player.picks.filter(p => (p.eventType ?? et) === et).sort((a, b) => a.predictedPos - b.predictedPos);
-                      const aPosMap = actualPos.get(et) ?? new Map();
-                      if (!eventPicks.length) return null;
-                      return (
-                        <div key={et}>
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1.5">{labels[et]}</p>
-                          <div className="space-y-1">
-                            {eventPicks.map(p => {
-                              const actual = aPosMap.get(p.driverId) ?? null;
-                              const exact = actual !== null && actual === p.predictedPos;
-                              return (
-                                <div key={p.predictedPos} className="flex items-center gap-2 text-xs">
-                                  <span className="font-mono text-slate-600 w-5">P{p.predictedPos}</span>
-                                  <span className={exact ? "text-emerald-300" : "text-slate-300"}>{p.driverName.split(" ").pop()}</span>
-                                  {actual !== null && (
-                                    <span className={`ml-auto font-mono ${exact ? "text-emerald-400" : "text-slate-500"}`}>
-                                      {exact ? "✓" : `→P${actual}`}
+                    {visibleEvents
+                      .filter((et) => sessionLocked[et])
+                      .map((et) => {
+                        const eventPicks = player.picks
+                          .filter((p) => (p.eventType ?? et) === et)
+                          .sort((a, b) => a.predictedPos - b.predictedPos);
+                        const aPosMap = actualPos.get(et) ?? new Map();
+                        if (!eventPicks.length) return null;
+                        return (
+                          <div key={et}>
+                            <p
+                              className="mb-1.5 text-[10px] font-bold uppercase tracking-wide"
+                              style={{ color: F1.carbonMid }}
+                            >
+                              {labels[et]}
+                            </p>
+                            <div className="space-y-1">
+                              {eventPicks.map((p) => {
+                                const actual = aPosMap.get(p.driverId) ?? null;
+                                const exact = actual !== null && actual === p.predictedPos;
+                                return (
+                                  <div key={p.predictedPos} className="flex items-center gap-2 text-xs">
+                                    <span className="w-5 font-mono" style={{ color: F1.carbonLight }}>
+                                      P{p.predictedPos}
                                     </span>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                    <span style={{ color: exact ? EXACT_TEXT : F1.carbon }}>
+                                      {p.driverName.split(" ").pop()}
+                                    </span>
+                                    {actual !== null && (
+                                      <span
+                                        className="ml-auto font-mono font-semibold"
+                                        style={{ color: exact ? EXACT_TEXT : F1.carbonMid }}
+                                      >
+                                        {exact ? "✓" : `→P${actual}`}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                   </div>
                 </div>
               )}
@@ -314,29 +473,31 @@ function LeagueTable({
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
 
 export function RaceWeekendResults({
-  races, selectedRace, resultsByEvent, myPicks, myScores, leaguePlayers, currentUserId
+  races,
+  selectedRace,
+  resultsByEvent,
+  myPicks,
+  myScores,
+  leaguePlayers,
+  currentUserId
 }: Props) {
   const sprintWeekend = isSprintWeekend(selectedRace);
-  const router = useRouter();
-  const pathname = usePathname();
   const now = new Date();
 
   const sessionLocked: Record<TabId, boolean> = {
     quali: new Date(selectedRace.quali_start) <= now || resultsByEvent.quali.length > 0,
-    sprint: sprintWeekend && selectedRace.sprint_start
-      ? new Date(selectedRace.sprint_start) <= now || resultsByEvent.sprint.length > 0
-      : false,
-    race: new Date(selectedRace.race_start) <= now || resultsByEvent.race.length > 0,
+    sprint:
+      sprintWeekend && selectedRace.sprint_start
+        ? new Date(selectedRace.sprint_start) <= now || resultsByEvent.sprint.length > 0
+        : false,
+    race: new Date(selectedRace.race_start) <= now || resultsByEvent.race.length > 0
   };
 
-  // Build driver name map from ALL sources:
-  // 1. Results (have team colors)
-  // 2. League players picks (have names even for DNS/DNQ drivers not in results)
   const driverNames = new Map<string, { name: string; team: string }>();
   for (const et of ["quali", "sprint", "race"] as TabId[]) {
     for (const r of resultsByEvent[et]) {
@@ -345,79 +506,109 @@ export function RaceWeekendResults({
       }
     }
   }
-  // Fill in from league picks — covers DNS/DNQ/not-classified drivers
   for (const player of leaguePlayers) {
     for (const pick of player.picks) {
-      if (!driverNames.has(pick.driverId) && pick.driverName && pick.driverName !== pick.driverId && !pick.driverName.startsWith("#")) {
+      if (
+        !driverNames.has(pick.driverId) &&
+        pick.driverName &&
+        pick.driverName !== pick.driverId &&
+        !pick.driverName.startsWith("#")
+      ) {
         driverNames.set(pick.driverId, { name: pick.driverName, team: "" });
       }
     }
   }
 
-  const weekendTotal = (["quali", "sprint", "race"] as TabId[])
-    .reduce((s, et) => s + (myScores[et]?.points ?? 0), 0);
-  const weekendExact = (["quali", "sprint", "race"] as TabId[])
-    .reduce((s, et) => s + (myScores[et]?.exact ?? 0), 0);
+  const weekendTotal = (["quali", "sprint", "race"] as TabId[]).reduce(
+    (s, et) => s + (myScores[et]?.points ?? 0),
+    0
+  );
+  const weekendExact = (["quali", "sprint", "race"] as TabId[]).reduce(
+    (s, et) => s + (myScores[et]?.exact ?? 0),
+    0
+  );
+
+  const raceDate = new Date(selectedRace.race_start).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+
+  const sessionsScored = (["quali", "sprint", "race"] as TabId[]).filter(
+    (et) => (myScores[et]?.points ?? 0) > 0
+  ).length;
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Results</h1>
+    <>
+      {/* Hero */}
+      <div
+        className="relative overflow-hidden rounded-2xl px-4 py-5 text-white"
+        style={{ background: F1.carbon, boxShadow: F1.headerShadow }}
+      >
+        <div className="absolute left-0 top-0 h-1 w-full rounded-t-2xl" style={{ background: F1.red }} />
+        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: F1.red }}>
+          {selectedRace.grand_prix}
+        </p>
+        <h1 className="mt-1 text-xl font-bold tracking-tight">Weekend results</h1>
 
-      {/* Race selector pills */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">
-        {races.map(r => {
-          const selected = r.id === selectedRace.id;
-          return (
-            <button key={r.id}
-              onClick={() => router.push(`${pathname}?race=${r.id}` as Route)}
-              className={`shrink-0 flex flex-col items-center px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                selected ? "bg-red-600 border-red-500 text-white"
-                : r.hasResults ? "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500"
-                : r.isPast ? "bg-slate-900 border-slate-800 text-slate-500"
-                : "bg-slate-900/50 border-slate-800/50 text-slate-600"
-              }`}
-            >
-              <span className="text-[10px] opacity-60">R{r.round}</span>
-              <span className="max-w-[72px] text-center leading-tight">{shortGP(r.grand_prix)}</span>
-              {r.hasResults && !selected && <span className="w-1 h-1 rounded-full bg-emerald-500 mt-1" />}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Race header + weekend score */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-xl font-bold">{selectedRace.grand_prix}</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {new Date(selectedRace.race_start).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
-          </p>
-          {sprintWeekend && (
-            <p className="text-xs text-yellow-400/90 mt-1">Sprint weekend — balanced scoring (172 pt max)</p>
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs text-white/60">{raceDate}</p>
+            {sprintWeekend && (
+              <p className="mt-1 text-xs font-medium" style={{ color: F1.red }}>
+                Sprint weekend
+              </p>
+            )}
+            {sessionsScored > 0 && (
+              <p className="mt-2 text-xs text-white/50">
+                {sessionsScored} session{sessionsScored !== 1 ? "s" : ""} scored
+              </p>
+            )}
+          </div>
+          {weekendTotal > 0 ? (
+            <div className="sm:text-right">
+              <p className="text-xs font-bold uppercase tracking-wide text-white/60">Your score</p>
+              <p className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: F1.red }}>
+                {weekendTotal}
+                <span className="ml-1 text-lg font-semibold text-white/80">pts</span>
+              </p>
+              {weekendExact > 0 && (
+                <p className="mt-0.5 text-xs font-medium text-emerald-400">{weekendExact} exact hits</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-white/50">No points scored yet</p>
           )}
         </div>
-        {weekendTotal > 0 && (
-          <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-3 text-center">
-            <p className="text-3xl font-bold text-red-400">{weekendTotal}</p>
-            <p className="text-xs text-slate-400 mt-0.5">points this weekend</p>
-            {weekendExact > 0 && <p className="text-xs text-emerald-400">{weekendExact} exact hits</p>}
-          </div>
-        )}
       </div>
 
-      {/* Session cards — sorted by session start time */}
+      {/* Race selector */}
+      <section className="rounded-2xl bg-white p-4" style={{ boxShadow: F1.cardShadow }}>
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+          Select race
+        </p>
+        <ResultsRaceSelector races={races} selectedRaceId={selectedRace.id} />
+      </section>
+
+      {/* Session cards */}
       <div className={`grid gap-4 ${sprintWeekend ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         {[
           { eventType: "quali" as TabId, label: "Qualifying", iso: selectedRace.quali_start, show: true },
-          { eventType: "sprint" as TabId, label: "Sprint", iso: selectedRace.sprint_start ?? "", show: sprintWeekend && !!selectedRace.sprint_start },
+          {
+            eventType: "sprint" as TabId,
+            label: "Sprint",
+            iso: selectedRace.sprint_start ?? "",
+            show: sprintWeekend && !!selectedRace.sprint_start
+          },
           { eventType: "race" as TabId, label: "Race", iso: selectedRace.race_start, show: true }
         ]
-          .filter(s => s.show)
+          .filter((s) => s.show)
           .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime())
           .map(({ eventType, label }) => (
             <SessionCard
               key={eventType}
-              eventType={eventType} label={label}
+              eventType={eventType}
+              label={label}
               results={resultsByEvent[eventType]}
               myPicks={myPicks[eventType]}
               myScore={myScores[eventType]}
@@ -428,7 +619,6 @@ export function RaceWeekendResults({
           ))}
       </div>
 
-      {/* League table */}
       <LeagueTable
         players={leaguePlayers}
         resultsByEvent={resultsByEvent}
@@ -436,6 +626,6 @@ export function RaceWeekendResults({
         sessionLocked={sessionLocked}
         currentUserId={currentUserId}
       />
-    </div>
+    </>
   );
 }

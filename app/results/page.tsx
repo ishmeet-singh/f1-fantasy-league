@@ -1,6 +1,7 @@
 import { RaceWeekendResults } from "@/components/race-weekend-results";
 import { getRequestUser } from "@/lib/request-user";
 import { loadResultsPage } from "@/lib/loaders/results";
+import { F1 } from "@/lib/f1-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +15,14 @@ export default async function ResultsPage({
 
   if (!data) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">Results</h1>
-        <div className="card text-center py-10 space-y-2">
-          <p className="text-slate-400">No races loaded yet.</p>
-          <p className="text-slate-600 text-sm">An admin needs to run &quot;Sync Season Calendar&quot; first.</p>
-        </div>
-      </div>
+      <section className="rounded-2xl bg-white p-6 text-center" style={{ boxShadow: F1.cardShadow }}>
+        <p className="font-semibold" style={{ color: F1.carbon }}>
+          No races loaded yet
+        </p>
+        <p className="mt-2 text-sm" style={{ color: F1.carbonLight }}>
+          An admin needs to run &quot;Sync Season Calendar&quot; first.
+        </p>
+      </section>
     );
   }
 
