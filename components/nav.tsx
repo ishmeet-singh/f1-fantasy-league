@@ -22,7 +22,7 @@ const PRIMARY_LINKS = [
 
 function linkClass(active: boolean, compact = false) {
   if (compact) {
-    return `flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+    return `flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-3.5 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
       active ? "text-white" : "text-white/50"
     }`;
   }
@@ -85,7 +85,7 @@ export function Nav({ email, isAdmin }: NavProps) {
         style={{ borderColor: F1.carbonMid, background: F1.carbon }}
         aria-label="Main navigation"
       >
-        <div className="mx-auto flex max-w-lg">
+        <div className="mx-auto flex max-w-lg px-1 pt-1">
           {PRIMARY_LINKS.map(({ href, mobileLabel }) => {
             const active = pathname.startsWith(href);
             return (

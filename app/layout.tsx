@@ -13,7 +13,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         {requestUser && (
           <Nav email={requestUser.email} isAdmin={isAdminEmail(requestUser.email)} />
         )}
-        <main className="mx-auto max-w-5xl p-4 pb-20 md:pb-4">{children}</main>
+        <main className="mx-auto max-w-5xl p-4 pb-24 md:pb-4">{children}</main>
       </body>
     </html>
   );
