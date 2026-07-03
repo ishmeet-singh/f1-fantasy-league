@@ -9,6 +9,11 @@ const cachedUsers: UserRow[] = [
 ];
 
 const cachedRaceCompletions = ["r1", "r2"];
+const races = [
+  { id: "r1", race_start: "2026-03-01T12:00:00Z" },
+  { id: "r2", race_start: "2026-03-08T12:00:00Z" }
+];
+const completed = new Set(cachedRaceCompletions);
 
 describe("cached dashboard reference data shapes", () => {
   it("cached user rows drive leaderboard the same as a live users query", () => {
@@ -28,7 +33,7 @@ describe("cached dashboard reference data shapes", () => {
         exact_matches: 2
       }
     ];
-    const lb = computeLeaderboard(cachedUsers, scores);
+    const lb = computeLeaderboard(cachedUsers, scores, races, completed);
     expect(lb[0].id).toBe("u2");
     expect(lb[0].name).toBe("Bob");
   });

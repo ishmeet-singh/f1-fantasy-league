@@ -3,6 +3,13 @@ import {
   getEventConfig,
   pickScoreRows
 } from "@/lib/scoring";
+import {
+  MAX_DROPPED_WEEKENDS,
+  NO_DROP_UNTIL_WEEKENDS,
+  SEASON_SCORING_RACES,
+  countingWeekendsFor,
+  dropsForScoredWeekends
+} from "@/lib/season-standings";
 
 const normalQuali = getEventConfig("quali", false);
 const normalRace = getEventConfig("race", false);
@@ -25,9 +32,9 @@ export default async function RulesPage() {
           closer you are to the actual position, the more you earn.
         </p>
         <p className="text-slate-300 leading-relaxed mt-3">
-          Season standings use your <strong className="text-white">best {BEST_WEEKENDS_COUNT} race weekends</strong>{" "}
-          (Bahrain and Saudi Arabia 2026 were cancelled, so the calendar is 22 rounds instead of 24).
-          You can miss a few weekends without hurting your total.
+          Season standings use your <strong className="text-white">best {BEST_WEEKENDS_COUNT} of {SEASON_SCORING_RACES} race weekends</strong>{" "}
+          (Bahrain and Saudi Arabia 2026 were cancelled). Your <strong className="text-white">worst {MAX_DROPPED_WEEKENDS} weekends are dropped</strong>{" "}
+          once you have more than {NO_DROP_UNTIL_WEEKENDS} scored races — e.g. after 8 races, only your best 4 count toward the total.
         </p>
       </Section>
 
@@ -164,7 +171,24 @@ export default async function RulesPage() {
           <li className="flex gap-2">
             <span className="text-red-400 shrink-0">▸</span>
             <span>
-              Your season score = sum of your <strong className="text-white">best {BEST_WEEKENDS_COUNT} weekend totals</strong>.
+              For each player with <strong className="text-white">n</strong> scored race weekends: drop{" "}
+              <strong className="text-white">min({MAX_DROPPED_WEEKENDS}, max(0, n − {NO_DROP_UNTIL_WEEKENDS}))</strong>{" "}
+              of their lowest weekend totals (earliest race breaks ties), then sum the rest.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-red-400 shrink-0">▸</span>
+            <span>
+              <strong className="text-white">Example (8 races in):</strong> n = 8 → drop{" "}
+              {dropsForScoredWeekends(8)} worst → your season score = sum of your best{" "}
+              {countingWeekendsFor(8)} weekends.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-red-400 shrink-0">▸</span>
+            <span>
+              <strong className="text-white">Full season (22 races):</strong> drop {MAX_DROPPED_WEEKENDS} worst →
+              sum of best {BEST_WEEKENDS_COUNT}.
             </span>
           </li>
           <li className="flex gap-2">

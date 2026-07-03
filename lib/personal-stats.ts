@@ -1,4 +1,4 @@
-import { bestNWeekendTotal, BEST_WEEKENDS_COUNT } from "@/lib/scoring";
+import { computeSeasonStanding, raceStartMapFromWeekends } from "@/lib/season-standings";
 import {
   computeLeaderboard,
   computeUserRank,
@@ -42,14 +42,25 @@ export function buildPersonalStats(
   userId: string,
   myScores: MyWeekendScoreRow[],
   users: UserRow[],
-  scoreTotals: WeekendScoreTotalRow[]
+  scoreTotals: WeekendScoreTotalRow[],
+  races: ReadonlyArray<{ id: string; race_start: string }>,
+  completedRaceIds: ReadonlySet<string>
 ): PersonalStats | null {
   if (!myScores.length) return null;
 
+  const raceStartById = raceStartMapFromWeekends(races);
+  const userWeekends = scoreTotals
+    .filter((t) => t.user_id === userId && completedRaceIds.has(t.race_id))
+    .map((t) => ({
+      race_id: t.race_id,
+      total_points: t.total_points,
+      total_error: t.total_error,
+      exact_matches: t.exact_matches
+    }));
+  const standing = computeSeasonStanding(userWeekends, raceStartById);
+
   const points = myScores.map((s) => s.total_points || 0);
-  const totalPoints = bestNWeekendTotal(points, BEST_WEEKENDS_COUNT);
   const bestWeekend = Math.max(0, ...points);
-  const exactMatches = myScores.reduce((sum, s) => sum + (s.exact_matches || 0), 0);
 
   const sorted = [...myScores].sort((a, b) => raceWeekendStart(b).localeCompare(raceWeekendStart(a)));
   const lastScoredRace = sorted.find((s) => (s.total_points || 0) > 0);
@@ -60,8 +71,19 @@ export function buildPersonalStats(
     lastRace = { name: w?.grand_prix || "", points: lastScoredRace.total_points || 0 };
   }
 
-  const leaderboard = computeLeaderboard(users, totalsAsWeekendRows(scoreTotals));
+  const leaderboard = computeLeaderboard(
+    users,
+    totalsAsWeekendRows(scoreTotals),
+    races,
+    completedRaceIds
+  );
   const rank = computeUserRank(userId, leaderboard);
 
-  return { rank, totalPoints, bestWeekend, exactMatches, lastRace };
+  return {
+    rank,
+    totalPoints: standing.score,
+    bestWeekend,
+    exactMatches: standing.exact,
+    lastRace
+  };
 }

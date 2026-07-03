@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getRequestUser } from "@/lib/request-user";
 import { loadDashboardPage } from "@/lib/loaders/dashboard";
+import { formatSeasonStandingsSubtitle } from "@/lib/season-standings";
 import { Countdown } from "@/components/countdown";
 import { LocalTime } from "@/components/local-time";
 import { SESSION_OPTS } from "@/lib/date-formats";
@@ -68,9 +69,11 @@ export default async function DashboardPage() {
       )}
 
       <div className="card space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="font-semibold text-lg">Leaderboard</h2>
-          <span className="text-xs text-slate-500">Best 18 races · tap row for history</span>
+          {season.past > 0 && (
+            <span className="text-xs text-slate-500">{formatSeasonStandingsSubtitle(season.past)}</span>
+          )}
         </div>
         <LeaderboardFull
           leaderboard={leaderboard}
@@ -84,7 +87,9 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2 card space-y-3">
           <div>
             <h3 className="font-semibold">Points Progression</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Cumulative points per race</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Raw cumulative points per race (standings use best-N with drops — see leaderboard)
+            </p>
           </div>
           <FantasyChart history={history} currentUserId={user?.id ?? null} />
         </div>

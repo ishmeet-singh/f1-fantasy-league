@@ -69,7 +69,7 @@ export function scoreEvent(
   return { points, totalError, exactMatches, podiumExact };
 }
 
-/** Season standings count only this many highest weekend totals (24 races − 2 cancelled in 2026). */
+/** @deprecated Use BEST_WEEKENDS_COUNT from @/lib/season-standings */
 export const BEST_WEEKENDS_COUNT = 18;
 
 /** Rows for rules UI: points per pick at each error distance. */

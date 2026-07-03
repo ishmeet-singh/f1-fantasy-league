@@ -27,8 +27,13 @@ describe("buildPersonalStats", () => {
       { user_id: "u1", race_id: "r1", total_points: 80, total_error: 2, exact_matches: 1 },
       { user_id: "u2", race_id: "r1", total_points: 150, total_error: 1, exact_matches: 2 }
     ];
+    const races = [
+      { id: "r1", race_start: "2026-03-01T12:00:00Z" },
+      { id: "r2", race_start: "2026-03-08T12:00:00Z" }
+    ];
+    const completed = new Set(["r1", "r2"]);
 
-    const stats = buildPersonalStats("u1", myScores, users, totals);
+    const stats = buildPersonalStats("u1", myScores, users, totals, races, completed);
     expect(stats).toMatchObject({
       rank: 1,
       totalPoints: 180,
@@ -39,6 +44,6 @@ describe("buildPersonalStats", () => {
   });
 
   it("returns null when user has no scores", () => {
-    expect(buildPersonalStats("u1", [], users, [])).toBeNull();
+    expect(buildPersonalStats("u1", [], users, [], [], new Set())).toBeNull();
   });
 });

@@ -24,16 +24,19 @@ const cachedScores: WeekendScoreTotalRow[] = [
   }
 ];
 
+const races = [{ id: "r1", grand_prix: "Bahrain Grand Prix", race_start: "2026-03-01T12:00:00Z" }];
+const completed = new Set(["r1"]);
+
 describe("cached weekend_scores shape", () => {
   it("drives leaderboard the same as uncached weekend score rows", () => {
-    const lb = computeLeaderboard(users, cachedScores);
+    const lb = computeLeaderboard(users, cachedScores, races, completed);
     expect(lb[0].id).toBe("u2");
     expect(lb[0].score).toBe(110);
   });
 
   it("drives points history with per-race ids from cache", () => {
-    const races = [{ id: "r1", grand_prix: "Bahrain Grand Prix" }];
-    const history = computePointsHistory(users, races, cachedScores, new Set(["r1"]));
+    const lb = computeLeaderboard(users, cachedScores, races, completed);
+    const history = computePointsHistory(users, races, cachedScores, completed, lb);
     expect(history[0].races[0]).toMatchObject({ raceId: "r1", points: 90 });
     expect(history[1].races[0]).toMatchObject({ raceId: "r1", points: 110 });
   });

@@ -77,8 +77,8 @@ export async function loadDashboardPage(userId: string | undefined): Promise<Das
   const completedIds = new Set(completedRaceIds);
   const weekendRows = weekends as WeekendScoreRow[];
 
-  const leaderboard = computeLeaderboard(users, weekendRows);
-  const history = computePointsHistory(users, raceWeekends, weekendRows, completedIds);
+  const leaderboard = computeLeaderboard(users, weekendRows, raceWeekends, completedIds);
+  const history = computePointsHistory(users, raceWeekends, weekendRows, completedIds, leaderboard);
   const season = computeSeasonProgress({
     raceIds: raceWeekends.map((r) => r.id),
     completedRaceIds: completedIds
