@@ -31,8 +31,8 @@ type AppBrandProps = {
   className?: string;
   logoHeight?: number;
   theme?: "light" | "dark";
-  /** "stacked" puts Fantasy League under the logo */
-  layout?: "inline" | "stacked";
+  /** "stacked" centres logo + title; "nav" is compact left-aligned for the header */
+  layout?: "inline" | "stacked" | "nav";
   subtitle?: string;
 };
 
@@ -45,6 +45,17 @@ export function AppBrand({
 }: AppBrandProps) {
   const textColor = theme === "dark" ? "text-white" : "text-zinc-900";
   const subColor = theme === "dark" ? "text-zinc-400" : "text-zinc-500";
+
+  if (layout === "nav") {
+    return (
+      <div className={`flex flex-col items-start gap-0.5${className ? ` ${className}` : ""}`}>
+        <F1Logo height={logoHeight} theme={theme} />
+        <p className={`text-[10px] font-bold uppercase leading-none tracking-wide ${textColor}`}>
+          Fantasy League
+        </p>
+      </div>
+    );
+  }
 
   if (layout === "stacked") {
     return (
