@@ -14,7 +14,7 @@ export function PreviewScreenNav({
   onScreen: (s: "dashboard" | "picks") => void;
   accent?: "default" | "f1";
 }) {
-  const activeBg = accent === "f1" ? "bg-[#E10600]" : "bg-zinc-900";
+  const activeBg = accent === "f1" ? "bg-[#D31411]" : "bg-zinc-900";
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-lg items-center justify-between gap-2 px-4 py-3">

@@ -23,7 +23,7 @@ export function Nav({ email, isAdmin }: NavProps) {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-slate-800 sticky top-0 z-10 bg-slate-950/90 backdrop-blur-sm">
+    <header className="border-b border-[#3A3A47] sticky top-0 z-10 bg-[#1C1C25]/95 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-5xl items-center gap-1 px-4 py-0 text-sm">
         <Link href="/dashboard" className="mr-3 py-3 flex-shrink-0">
           <AppBrand theme="dark" logoHeight={24} />

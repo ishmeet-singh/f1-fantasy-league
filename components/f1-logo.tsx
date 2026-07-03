@@ -1,18 +1,20 @@
 import Image from "next/image";
 
-const LOGO_ASPECT = 1024 / 357;
+/** Official F1 wordmark aspect ratio (800×200 source). */
+const LOGO_ASPECT = 4;
 
 type F1LogoProps = {
   className?: string;
   /** Height in px; width scales from asset aspect ratio */
   height?: number;
+  /** dark = white logo on Shark/dark surfaces; light = Thunderbird red on white */
   theme?: "light" | "dark";
 };
 
-/** Official F1 wordmark — transparent PNG derived from user-provided asset. */
+/** Official F1 wordmark (user-provided transparent PNGs). */
 export function F1Logo({ className, height = 22, theme = "light" }: F1LogoProps) {
   const width = Math.round(height * LOGO_ASPECT);
-  const src = theme === "dark" ? "/f1-logo-white.png" : "/f1-logo-dark.png";
+  const src = theme === "dark" ? "/f1-logo-white.png" : "/f1-logo-red.png";
 
   return (
     <Image
