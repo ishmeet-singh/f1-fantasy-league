@@ -44,16 +44,27 @@ export async function GET(request: Request) {
   const supabase = getSupabaseAdmin();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://f1-fantasy-league-lilac.vercel.app";
 
-  // Fetch races with sessions in the next 49 hours
+  // Fetch upcoming races, then keep any with a session in the reminder window.
+  // Must check sprint_start too — on sprint weekends sprint is *before* quali, so
+  // anchoring only on quali_start misses every early sprint reminder interval.
   const lookaheadMs = (48 * 60 + 60) * 60 * 1000;
-  const cutoff = new Date(Date.now() + lookaheadMs).toISOString();
-  const { data: races } = await supabase
+  const nowMs = Date.now();
+  const cutoffMs = nowMs + lookaheadMs;
+  const { data: upcoming } = await supabase
     .from("race_weekends")
     .select("id,grand_prix,quali_start,sprint_start,race_start,has_sprint")
-    .lte("quali_start", cutoff)
-    .gte("race_start", new Date().toISOString());
+    .gte("race_start", new Date(nowMs).toISOString());
 
-  if (!races?.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
+  const races = (upcoming ?? []).filter((race) => {
+    const sessions = [race.quali_start, race.race_start];
+    if (race.has_sprint && race.sprint_start) sessions.push(race.sprint_start);
+    return sessions.some((start) => {
+      const t = new Date(start).getTime();
+      return t > nowMs && t <= cutoffMs;
+    });
+  });
+
+  if (!races.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
 
   const { data: allUsers } = await supabase.from("users").select("id,email,display_name");
   if (!allUsers?.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
