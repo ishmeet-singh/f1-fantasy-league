@@ -10,10 +10,10 @@ describe("mergeDriverUpsert", () => {
     expect(merged.name).toBe("Max Verstappen");
   });
 
-  it("keeps existing name when OpenF1 sends a bare car number", () => {
+  it("uses crossref when both API and DB names are bare numbers", () => {
     const merged = mergeDriverUpsert(
       { id: "3", name: "3", team: "Red Bull Racing" },
-      { id: "3", name: "Max Verstappen", team: "Red Bull Racing" }
+      { id: "3", name: "3", team: "Red Bull Racing" }
     );
     expect(merged.name).toBe("Max Verstappen");
   });

@@ -12,7 +12,8 @@ import {
   getJolpiResultsForRound,
 } from "@/lib/jolpi";
 import { applyScheduleOverridesAfterCalendarSync } from "@/lib/schedule-overrides";
-import { mergeDriverUpsert } from "@/lib/driver-sync";
+import { mapJolpiResultsToOpenF1, mergeDriverWithCrossref } from "@/lib/driver-crossref";
+import { CANCELLED_RACE_IDS } from "@/lib/cancelled-races";
 import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
 import { sessionsReadyToSync } from "@/lib/sync-session-gate";
 
@@ -31,33 +32,24 @@ async function syncCalendarOpenF1(year: number) {
     fetchJolpiRaces(year).catch(() => [] as Awaited<ReturnType<typeof fetchJolpiRaces>>)
   ]);
 
-  const drivers = allDrivers.filter(d => d.full_name && String(d.full_name).trim() !== "");
   const { data: existingDrivers } = await supabaseAdmin.from("drivers").select("id,name,team");
   const existingById = new Map((existingDrivers ?? []).map((d) => [d.id, d]));
 
-  for (const d of drivers) {
-    if (!d.full_name || String(d.full_name).trim() === "") continue;
+  for (const d of allDrivers) {
     const incoming = {
       id: String(d.driver_number),
-      name: d.full_name,
+      name: d.full_name ? String(d.full_name).trim() : "",
       team: d.team_name || "Unknown"
     };
-    const merged = mergeDriverUpsert(incoming, existingById.get(incoming.id));
+    const merged = mergeDriverWithCrossref(incoming, existingById.get(incoming.id));
     await supabaseAdmin.from("drivers").upsert(merged);
     existingById.set(merged.id, merged);
   }
 
-  // Races confirmed cancelled that OpenF1/Jolpi are slow to reflect.
-  // Add meeting_key here to permanently exclude from the calendar.
-  const CANCELLED_MEETING_KEYS = new Set([
-    "1282", // Bahrain GP 2026 — cancelled (ongoing conflict)
-    "1283", // Saudi Arabian GP 2026 — cancelled (ongoing conflict)
-  ]);
-
   const raceMeetings = meetings.filter(
     (m) => !m.meeting_name.toLowerCase().includes("testing")
         && !m.meeting_name.toLowerCase().includes("pre-season")
-        && !CANCELLED_MEETING_KEYS.has(String(m.meeting_key))
+        && !CANCELLED_RACE_IDS.has(String(m.meeting_key))
   );
 
   // Build a set of Jolpi race dates (ms) for cross-checking
@@ -162,18 +154,6 @@ async function syncResultsOpenF1() {
   console.log(`OpenF1 sync: processing ${races.length} race(s) in window (windowStart=${windowStart} windowEnd=${windowEnd})`);
   console.log(`OpenF1 sync: races found: ${races.map(r => `${r.id}(race_start=${r.race_start})`).join(", ")}`);
 
-  // Build a name→driver_number lookup from our drivers table.
-  // Needed to map Jolpi driverId ("russell") to OpenF1 driver_number ("63").
-  const { data: dbDrivers } = await supabaseAdmin.from("drivers").select("id,name");
-  const jolpiIdToDriverNum = new Map<string, string>();
-  for (const d of dbDrivers ?? []) {
-    // "George Russell" → last name "russell"
-    const lastName = d.name.split(" ").pop()?.toLowerCase() ?? "";
-    jolpiIdToDriverNum.set(lastName, d.id);
-    // "Max Verstappen" → full name as key too, for compound names
-    jolpiIdToDriverNum.set(d.name.toLowerCase().replace(/\s+/g, "_"), d.id);
-  }
-
   for (const race of races) {
     const year = new Date(race.race_start).getUTCFullYear();
 
@@ -233,18 +213,7 @@ async function syncResultsOpenF1() {
               const jolpiRows = await getJolpiResultsForRound(year, round, eventType, allResults);
 
               if (jolpiRows.length) {
-                rows = jolpiRows
-                  .map(r => {
-                    const lastName = r.driverId.split("_").pop() ?? r.driverId;
-                    const driverNum = jolpiIdToDriverNum.get(lastName.toLowerCase())
-                      ?? jolpiIdToDriverNum.get(r.driverId.toLowerCase());
-                    if (!driverNum) {
-                      console.warn(`[${race.id}/${eventType}] No driver_number mapping for Jolpi driverId: ${r.driverId}`);
-                      return null;
-                    }
-                    return { driver_number: driverNum, position: r.position };
-                  })
-                  .filter((r): r is { driver_number: string; position: number } => r !== null);
+                rows = mapJolpiResultsToOpenF1(jolpiRows);
 
                 jolpiCount = rows.length;
                 if (rows.length) {

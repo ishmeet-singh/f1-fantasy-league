@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { bestNWeekendTotal, BEST_WEEKENDS_COUNT } from "@/lib/scoring";
 import { syncCalendar } from "@/lib/sync";
 import { fetchF1DriverStandings, type F1DriverStanding } from "@/lib/jolpi";
+import { computeSeasonProgress } from "@/lib/cancelled-races";
 
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
@@ -61,11 +62,11 @@ export async function getSeasonProgress() {
     supabase.from("results").select("race_id").eq("event_type", "race")
   ]);
 
-  const total = allRaces?.length ?? 0;
   const completedIds = new Set((completedResults ?? []).map(r => r.race_id));
-  const past = completedIds.size; // Only counts races that actually happened
-
-  return { total, past };
+  return computeSeasonProgress({
+    raceIds: (allRaces ?? []).map((r) => r.id),
+    completedRaceIds: completedIds
+  });
 }
 
 export type LeaderboardEntry = {

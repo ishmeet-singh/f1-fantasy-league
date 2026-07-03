@@ -12,6 +12,7 @@ import {
 } from "@/lib/jolpi";
 import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
 import { sessionsReadyToSync } from "@/lib/sync-session-gate";
+import { mapJolpiResultsToOpenF1 } from "@/lib/driver-crossref";
 
 function isoDateTime(date: string, time: string) {
   // date = "2026-03-08", time = "04:00:00Z"
@@ -102,16 +103,6 @@ export async function syncResultsJolpi() {
   const allRaces = races ?? [];
   if (!allRaces.length) return;
 
-  // Build driver name→number lookup for OpenF1-ID races (Jolpi uses driverId strings,
-  // but the results table uses OpenF1 driver_numbers as driver_id foreign key)
-  const { data: dbDrivers } = await supabase.from("drivers").select("id,name");
-  const jolpiIdToDriverNum = new Map<string, string>();
-  for (const d of dbDrivers ?? []) {
-    const lastName = d.name.split(" ").pop()?.toLowerCase() ?? "";
-    jolpiIdToDriverNum.set(lastName, d.id);
-    jolpiIdToDriverNum.set(d.name.toLowerCase().replace(/\s+/g, "_"), d.id);
-  }
-
   // Group races by year
   const racesByYear = new Map<number, typeof allRaces>();
   for (const race of allRaces) {
@@ -173,19 +164,12 @@ export async function syncResultsJolpi() {
         let resultRows: { race_id: string; event_type: string; driver_id: string; actual_position: number }[];
 
         if (isOpenF1Race) {
-          // Map Jolpi driverId strings to OpenF1 driver_numbers
-          resultRows = rows
-            .map(row => {
-              const lastName = row.driverId.split("_").pop() ?? row.driverId;
-              const driverNum = jolpiIdToDriverNum.get(lastName.toLowerCase())
-                ?? jolpiIdToDriverNum.get(row.driverId.toLowerCase());
-              if (!driverNum) {
-                console.warn(`[jolpi/${race.id}/${eventType}] No driver_number for: ${row.driverId}`);
-                return null;
-              }
-              return { race_id: String(race.id), event_type: eventType, driver_id: driverNum, actual_position: row.position };
-            })
-            .filter((r): r is NonNullable<typeof r> => r !== null);
+          resultRows = mapJolpiResultsToOpenF1(rows).map((r) => ({
+            race_id: String(race.id),
+            event_type: eventType,
+            driver_id: r.driver_number,
+            actual_position: r.position
+          }));
         } else {
           resultRows = rows.map(row => ({
             race_id: String(race.id),

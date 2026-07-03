@@ -6,6 +6,7 @@ import { SESSION_OPTS } from "@/lib/date-formats";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { syncCalendar } from "@/lib/sync";
+import { resolveDriverDisplayName } from "@/lib/driver-crossref";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -123,10 +124,11 @@ export default async function PicksPage({
       const userPicks = (allPickRows ?? [])
         .filter((p) => p.user_id === u.id && p.event_type === eventType)
         .map((p) => {
-          const dn = Array.isArray(p.drivers)
+          const rawName = Array.isArray(p.drivers)
             ? p.drivers[0]?.name
-            : (p.drivers as { name: string } | null)?.name ?? p.driver_id;
-          return { predictedPos: p.predicted_position, driverId: p.driver_id, driverName: dn ?? p.driver_id };
+            : (p.drivers as { name: string } | null)?.name ?? null;
+          const driverName = resolveDriverDisplayName(p.driver_id, rawName);
+          return { predictedPos: p.predicted_position, driverId: p.driver_id, driverName };
         });
       return {
         userId: u.id,

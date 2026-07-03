@@ -1,6 +1,7 @@
 import { RaceWeekendResults } from "@/components/race-weekend-results";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { resolveDriverDisplayName } from "@/lib/driver-crossref";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,7 @@ export default async function ResultsPage({
     resultsByEvent[et].push({
       driver_id: String(r.driver_id),
       actual_position: r.actual_position,
-      driver_name: driver?.name || `#${r.driver_id}`,
+      driver_name: resolveDriverDisplayName(String(r.driver_id), driver?.name),
       driver_team: driver?.team || ""
     });
   }
@@ -121,7 +122,7 @@ export default async function ResultsPage({
       userName: u.display_name || u.email.split("@")[0],
       picks: userPicks.map(p => {
           const driver = driverMap.get(p.driver_id);
-        const driverName = driver?.name || `#${p.driver_id}`;
+        const driverName = resolveDriverDisplayName(p.driver_id, driver?.name);
         return { predictedPos: p.predicted_position, driverId: p.driver_id, driverName, eventType: p.event_type as TabId };
       }),
       scores: scoresByEt

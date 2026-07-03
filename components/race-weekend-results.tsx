@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { Route } from "next";
 import { isSprintWeekend } from "@/lib/race-weekend";
+import { resolveDriverDisplayName } from "@/lib/driver-crossref";
 import { pointsForDiff } from "@/lib/scoring";
 import type { EventType } from "@/lib/types";
 
@@ -68,7 +69,10 @@ function SessionCard({
       const pts = diff !== null ? pointsForDiff(eventType as EventType, diff, hasSprint) : null;
       const fromMap = driverNames.get(driverId);
       const fromResults = actualDriver.get(driverId);
-      const driverName = fromMap?.name || fromResults?.driver_name || `#${driverId}`;
+      const driverName = resolveDriverDisplayName(
+        driverId,
+        fromMap?.name || fromResults?.driver_name
+      );
       const driverTeam = fromMap?.team || fromResults?.driver_team || "";
       return { driverId, predictedPos, actual, diff, pts, driverName, driverTeam };
     })
