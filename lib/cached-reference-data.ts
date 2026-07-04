@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { filterActiveRaceWeekends } from "@/lib/cancelled-races";
 
 export type RaceWeekendRow = {
   id: string;
@@ -27,8 +28,9 @@ async function fetchRaceWeekendsUncached(): Promise<RaceWeekendRow[]> {
   const { data } = await getSupabaseAdmin()
     .from("race_weekends")
     .select("id,grand_prix,race_date,quali_start,sprint_start,race_start,has_sprint")
+    .not("id", "like", "jolpi-%")
     .order("race_start", { ascending: true });
-  return (data ?? []) as RaceWeekendRow[];
+  return filterActiveRaceWeekends((data ?? []) as RaceWeekendRow[]);
 }
 
 async function fetchDriversUncached(): Promise<DriverRow[]> {

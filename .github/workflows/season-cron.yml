@@ -23,7 +23,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
       - name: Send reminder emails (every 15 minutes)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *' || github.event.schedule == '*/5 * * * *' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \

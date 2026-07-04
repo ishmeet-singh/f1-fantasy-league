@@ -8,6 +8,8 @@ import {
   shouldSendReminderNow,
   type ReminderRaceWeekend
 } from "@/lib/reminder-races";
+import { usersWithCompletePicks, userHasCompletePicks } from "@/lib/reminder-submission";
+import { filterActiveRaceWeekends } from "@/lib/cancelled-races";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -33,9 +35,14 @@ export async function GET(request: Request) {
   const { data: upcoming } = await supabase
     .from("race_weekends")
     .select("id,grand_prix,quali_start,sprint_start,race_start,has_sprint")
+    .not("id", "like", "jolpi-%")
     .gte("race_start", new Date(nowMs).toISOString());
 
-  const races = selectRacesInReminderWindow(upcoming ?? [], nowMs, REMINDER_LOOKAHEAD_MS);
+  const races = selectRacesInReminderWindow(
+    filterActiveRaceWeekends(upcoming ?? []),
+    nowMs,
+    REMINDER_LOOKAHEAD_MS
+  );
 
   if (!races.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
 
@@ -63,14 +70,14 @@ export async function GET(request: Request) {
 
         const label = intervalLabel(intervalMins);
 
-        // Find users who have NOT submitted picks for this session
+        // Find users who have NOT submitted a complete pick set for this session
         const { data: submitted } = await supabase
           .from("predictions")
           .select("user_id")
           .eq("race_id", race.id)
           .eq("event_type", eventType);
 
-        const submittedIds = new Set((submitted || []).map((r) => r.user_id));
+        const submittedIds = usersWithCompletePicks(submitted ?? [], eventType);
 
         // Find users who already got this reminder
         const { data: alreadySent } = await supabase
@@ -88,6 +95,12 @@ export async function GET(request: Request) {
 
         for (const user of targets) {
           try {
+            // Re-check immediately before send (picks may have landed since the batch query).
+            if (await userHasCompletePicks(supabase, user.id, race.id, eventType)) {
+              skipped++;
+              continue;
+            }
+
             // Claim the notification_log slot FIRST (before sending) to prevent race
             // conditions where two concurrent cron runs both send the same reminder.
             // The unique constraint on (user_id, race_id, event_type, interval_label)

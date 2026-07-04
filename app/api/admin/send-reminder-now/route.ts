@@ -1,6 +1,7 @@
 import { requireAdminApi } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendReminderEmail } from "@/lib/email";
+import { usersWithCompletePicks, userHasCompletePicks } from "@/lib/reminder-submission";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     .eq("race_id", raceId)
     .eq("event_type", eventType);
 
-  const submittedIds = new Set((submitted || []).map(r => r.user_id));
+  const submittedIds = usersWithCompletePicks(submitted ?? [], eventType);
   const targets = allUsers.filter(u => !submittedIds.has(u.id));
 
   const sessionStart = eventType === "quali" ? race.quali_start
@@ -58,6 +59,11 @@ export async function POST(req: Request) {
 
   for (const user of targets) {
     try {
+      if (await userHasCompletePicks(supabase, user.id, raceId, eventType)) {
+        skipped++;
+        continue;
+      }
+
       let picksLink = `${appUrl}/picks`;
       let isMagicLink = false;
 
