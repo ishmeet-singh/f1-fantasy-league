@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   closestCenter,
   useSensor,
@@ -59,6 +59,8 @@ function slotId(index: number) {
 const DROP_HIT_SCALE = 0.8;
 /** Finger must rest on a slot this long before release will commit a drop. */
 const DROP_STABLE_MS = 280;
+/** Hold this long before a drag starts on touch (lets vertical scroll pass through). */
+const TOUCH_DRAG_DELAY_MS = 400;
 
 function scaleRectFromCenter(
   rect: { top: number; left: number; width: number; height: number; bottom: number; right: number },
@@ -121,6 +123,34 @@ function useCountdown(deadline: string, locked: boolean) {
   return label;
 }
 
+function DragHandle({
+  listeners,
+  attributes
+}: {
+  listeners: ReturnType<typeof useSortable>["listeners"];
+  attributes: ReturnType<typeof useSortable>["attributes"];
+}) {
+  return (
+    <button
+      type="button"
+      {...listeners}
+      {...attributes}
+      className="flex shrink-0 cursor-grab items-center justify-center rounded-lg px-1.5 py-2 active:cursor-grabbing"
+      style={{ color: F1.carbonLight }}
+      aria-label="Hold to drag and reorder"
+    >
+      <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden>
+        <circle cx="2.5" cy="2.5" r="1.5" />
+        <circle cx="7.5" cy="2.5" r="1.5" />
+        <circle cx="2.5" cy="8" r="1.5" />
+        <circle cx="7.5" cy="8" r="1.5" />
+        <circle cx="2.5" cy="13.5" r="1.5" />
+        <circle cx="7.5" cy="13.5" r="1.5" />
+      </svg>
+    </button>
+  );
+}
+
 function PickSlot({
   slotIdx,
   driver,
@@ -162,7 +192,7 @@ function PickSlot({
   return (
     <div
       ref={setNodeRef}
-      className="flex items-center gap-3 rounded-2xl border p-3 transition-colors"
+      className="flex items-center gap-2 rounded-2xl border p-3 transition-colors"
       style={{
         ...style,
         opacity: isDragging ? 0.35 : 1,
@@ -171,11 +201,8 @@ function PickSlot({
         boxShadow: isOver ? `0 0 0 2px ${F1.red}33` : undefined
       }}
     >
-      <div
-        {...listeners}
-        {...attributes}
-        className="flex min-w-0 flex-1 touch-none cursor-grab items-center gap-3 active:cursor-grabbing"
-      >
+      <DragHandle listeners={listeners} attributes={attributes} />
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {posBadge(slotIdx)}
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {teamDot(driver.team)}
@@ -236,7 +263,7 @@ function PoolChip({
       }}
       {...listeners}
       {...attributes}
-      className="inline-flex touch-none cursor-grab items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition active:cursor-grabbing active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex cursor-grab items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition active:cursor-grabbing active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
       style={{
         opacity: isDragging ? 0.35 : 1,
         background: F1.white,
@@ -312,8 +339,10 @@ export function PicksForm({
   const sortableIds = slots.map((_, i) => slotId(i));
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 12 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: TOUCH_DRAG_DELAY_MS, tolerance: 15 }
+    })
   );
 
   const collisionDetection: CollisionDetection = useCallback((args) => {
@@ -554,7 +583,7 @@ export function PicksForm({
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
             <p className="text-xs" style={{ color: F1.carbonLight }}>
-              {filledCount}/{size} picked · press and drag · hold ~0.3s on a slot to drop
+              {filledCount}/{size} picked · hold ⋮⋮ grip to reorder · pause on a slot to drop
             </p>
             {slots.map((driverId, i) => {
               const driver = driverId ? (driverById.get(driverId) ?? null) : null;
@@ -575,7 +604,9 @@ export function PicksForm({
             Driver pool
           </p>
           <p className="text-xs" style={{ color: F1.carbonLight }}>
-            {pool.length > 0 ? "Tap to add · drag to a slot and pause briefly before releasing" : "All drivers picked"}
+            {pool.length > 0
+              ? "Tap to add · hold ~0.4s on a chip to drag to a slot"
+              : "All drivers picked"}
           </p>
           <div className="flex flex-wrap gap-2">
             {pool.map((d) => (
