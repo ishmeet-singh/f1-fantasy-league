@@ -1,4 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import {
+  configuredReplacementDrivers,
+  eligibleDriverIdsForRace
+} from "@/lib/race-driver-eligibility";
 import { EventType } from "@/lib/types";
 
 const sizeByEvent = { quali: 3, sprint: 10, race: 10 } as const;
@@ -86,6 +90,19 @@ export async function savePicks(input: SavePicksInput): Promise<{ ok: true } | {
   const uniqueDrivers = new Set(entries.map((e) => e.driver_id));
   if (uniqueDrivers.size !== entries.length) {
     return { error: "Duplicate drivers not allowed" };
+  }
+
+  const eligibleDriverIds = eligibleDriverIdsForRace(input.raceId);
+  if (entries.some((entry) => !eligibleDriverIds.has(entry.driver_id))) {
+    return { error: "One or more drivers are not entered for this race" };
+  }
+
+  const replacementDrivers = configuredReplacementDrivers(input.raceId);
+  if (replacementDrivers.length) {
+    const { error } = await admin
+      .from("drivers")
+      .upsert(replacementDrivers, { onConflict: "id" });
+    if (error) return { error: error.message };
   }
 
   const { data: existing } = await admin

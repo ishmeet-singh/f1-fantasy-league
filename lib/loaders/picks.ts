@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getCachedDrivers, getCachedRaceWeekends, type RaceWeekendRow } from "@/lib/cached-reference-data";
 import { resolveDriverDisplayName } from "@/lib/driver-crossref";
+import { eligibleDriversForRace } from "@/lib/race-driver-eligibility";
 
 export type PicksPageData = {
   races: RaceWeekendRow[];
@@ -76,7 +77,7 @@ export async function loadPicksPage(
 
   return {
     races,
-    drivers,
+    drivers: eligibleDriversForRace(race.id, drivers),
     race,
     pickRows,
     existingResults: resultsRes.data ?? [],

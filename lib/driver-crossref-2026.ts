@@ -1,5 +1,6 @@
 /**
- * 2026 F1 grid — permanent number (OpenF1 driver_number), Jolpi driverId, FIA code.
+ * Known 2026 F1 race participants — permanent number (OpenF1 driver_number),
+ * Jolpi driverId, FIA code. Includes confirmed substitute drivers.
  * Source: Jolpi/Ergast 2026 standings + Australian GP results (permanentNumber).
  */
 export type DriverCrossrefEntry = {
@@ -20,6 +21,7 @@ export const DRIVER_CROSSREF_2026: DriverCrossrefEntry[] = [
   { openf1_id: "14", jolpi_id: "alonso", code: "ALO", canonical_name: "Fernando Alonso" },
   { openf1_id: "16", jolpi_id: "leclerc", code: "LEC", canonical_name: "Charles Leclerc" },
   { openf1_id: "18", jolpi_id: "stroll", code: "STR", canonical_name: "Lance Stroll" },
+  { openf1_id: "22", jolpi_id: "tsunoda", code: "TSU", canonical_name: "Yuki Tsunoda" },
   { openf1_id: "23", jolpi_id: "albon", code: "ALB", canonical_name: "Alexander Albon" },
   { openf1_id: "27", jolpi_id: "hulkenberg", code: "HUL", canonical_name: "Nico Hülkenberg" },
   { openf1_id: "30", jolpi_id: "lawson", code: "LAW", canonical_name: "Liam Lawson" },

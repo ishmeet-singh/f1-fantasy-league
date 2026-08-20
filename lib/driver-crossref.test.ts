@@ -73,9 +73,10 @@ describe("mapJolpiResultsToOpenF1", () => {
     ]);
   });
 
-  it("covers the full 2026 grid without duplicate openf1 ids", () => {
+  it("covers all known 2026 race participants without duplicate OpenF1 ids", () => {
     const ids = new Set(DRIVER_CROSSREF_2026.map((d) => d.openf1_id));
     expect(ids.size).toBe(DRIVER_CROSSREF_2026.length);
-    expect(DRIVER_CROSSREF_2026.length).toBe(22);
+    expect(DRIVER_CROSSREF_2026.length).toBe(23);
+    expect(mapJolpiDriverToOpenF1("tsunoda")).toBe("22");
   });
 });
