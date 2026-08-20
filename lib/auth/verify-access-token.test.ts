@@ -40,8 +40,8 @@ describe("verifyAccessToken", () => {
   it("rejects a tampered token", async () => {
     const token = await signTestToken("user-abc", "player@example.com", 3600);
     const [header, payload, signature] = token.split(".");
-    const last = signature.slice(-1);
-    const tampered = `${header}.${payload}.${signature.slice(0, -1)}${last === "a" ? "b" : "a"}`;
+    const first = signature[0];
+    const tampered = `${header}.${payload}.${first === "a" ? "b" : "a"}${signature.slice(1)}`;
     await expect(verifyAccessToken(tampered, TEST_SECRET)).resolves.toBeNull();
   });
 });
