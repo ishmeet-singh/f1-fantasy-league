@@ -4,11 +4,12 @@ export type CronJob = "sync-results" | "send-reminders" | "sync-calendar" | "rec
 
 export async function startCronRun(job: CronJob): Promise<number | null> {
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("cron_runs")
     .insert({ job })
     .select("id")
     .single();
+  if (error) console.error(`[cron-log/${job}] start failed: ${error.message}`);
   return data?.id ?? null;
 }
 
@@ -19,7 +20,7 @@ export async function endCronRun(
 ) {
   if (!id) return;
   const supabase = getSupabaseAdmin();
-  await supabase
+  const { error } = await supabase
     .from("cron_runs")
     .update({
       finished_at: new Date().toISOString(),
@@ -28,4 +29,5 @@ export async function endCronRun(
       summary: opts.summary ?? null
     })
     .eq("id", id);
+  if (error) console.error(`[cron-log/${id}] finish failed: ${error.message}`);
 }

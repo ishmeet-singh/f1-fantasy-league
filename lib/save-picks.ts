@@ -3,6 +3,7 @@ import {
   configuredReplacementDrivers,
   eligibleDriverIdsForRace
 } from "@/lib/race-driver-eligibility";
+import { recomputeRaceScores } from "@/lib/recompute";
 import { EventType } from "@/lib/types";
 
 const sizeByEvent = { quali: 3, sprint: 10, race: 10 } as const;
@@ -137,6 +138,13 @@ export async function savePicks(input: SavePicksInput): Promise<{ ok: true } | {
     error = fallback.error;
   }
   if (error) return { error: error.message };
+
+  if (input.skipLockCheck) {
+    const recompute = await recomputeRaceScores(input.raceId);
+    if (recompute.errors.length) {
+      return { error: `Picks saved, but score recompute failed: ${recompute.errors.join("; ")}` };
+    }
+  }
 
   return { ok: true };
 }

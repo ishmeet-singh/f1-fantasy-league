@@ -38,7 +38,7 @@ create table if not exists public.results (
   race_id text not null references public.race_weekends(id) on delete cascade,
   event_type text not null check (event_type in ('quali','sprint','race')),
   driver_id text not null references public.drivers(id),
-  actual_position int not null check (actual_position >= 1 and actual_position <= 20),
+  actual_position int not null check (actual_position >= 1 and actual_position <= 22),
   unique (race_id, event_type, driver_id)
 );
 

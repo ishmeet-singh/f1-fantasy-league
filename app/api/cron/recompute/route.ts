@@ -13,10 +13,10 @@ export async function GET(request: Request) {
   try {
     const result = await recomputeAllScores();
     if (result.errors.length) {
-      await endCronRun(runId, "error", { error: result.errors.join("; ") });
+      await endCronRun(runId, "error", { error: result.errors.join("; "), summary: { ...result } });
       return NextResponse.json({ ok: false, ...result }, { status: 500 });
     }
-    await endCronRun(runId, "ok");
+    await endCronRun(runId, "ok", { summary: { ...result } });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("recompute cron error:", err);

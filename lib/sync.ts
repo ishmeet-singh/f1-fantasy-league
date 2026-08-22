@@ -1,6 +1,6 @@
 import { fetchDrivers, fetchMeetings, fetchSessionResults, fetchSessionsForMeeting } from "@/lib/openf1";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { recomputeAllScores } from "@/lib/recompute";
+import { hasCompleteResults, recomputeRaceScores } from "@/lib/recompute";
 import { syncResultsJolpi } from "@/lib/sync-jolpi";
 import {
   findJolpiRoundByDate,
@@ -15,6 +15,9 @@ import { mapJolpiResultsToOpenF1, mergeDriverWithCrossref } from "@/lib/driver-c
 import { CANCELLED_RACE_IDS } from "@/lib/cancelled-races";
 import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
 import { sessionsReadyToSync } from "@/lib/sync-session-gate";
+import type { EventType } from "@/lib/types";
+
+export type SyncedSession = { raceId: string; eventType: EventType };
 
 function findSessionStart(sessions: { session_name: string; date_start: string }[], names: string[]) {
   const found = sessions.find((session) => names.includes(session.session_name));
@@ -127,9 +130,10 @@ export async function syncCalendar(year = new Date().getUTCFullYear()) {
   }
 }
 
-async function syncResultsOpenF1() {
+async function syncResultsOpenF1(): Promise<SyncedSession[]> {
   const supabaseAdmin = getSupabaseAdmin();
   const now = Date.now();
+  const syncedSessions: SyncedSession[] = [];
 
   // Window: races whose weekend has started (quali is typically 2 days before race)
   // or will start within 3 days (so we catch qualifying before race_start passes).
@@ -147,7 +151,7 @@ async function syncResultsOpenF1() {
 
   if (!races?.length) {
     console.log(`OpenF1 sync: no races in window (windowStart=${windowStart} windowEnd=${windowEnd})`);
-    return;
+    return syncedSessions;
   }
 
   console.log(`OpenF1 sync: processing ${races.length} race(s) in window (windowStart=${windowStart} windowEnd=${windowEnd})`);
@@ -157,11 +161,25 @@ async function syncResultsOpenF1() {
     const year = new Date(race.race_start).getUTCFullYear();
 
     // Check which sessions already have results in the DB — no need to re-fetch those
-    const { data: existingResults } = await supabaseAdmin
+    const { data: existingResults, error: existingResultsError } = await supabaseAdmin
       .from("results")
-      .select("event_type")
+      .select("event_type,driver_id")
       .eq("race_id", race.id);
-    const alreadySynced = new Set((existingResults ?? []).map(r => r.event_type));
+    if (existingResultsError) throw new Error(`[${race.id}] existing results: ${existingResultsError.message}`);
+
+    const resultDriversByEvent = new Map<string, { driver_id: string }[]>();
+    for (const result of existingResults ?? []) {
+      if (!resultDriversByEvent.has(result.event_type)) resultDriversByEvent.set(result.event_type, []);
+      resultDriversByEvent.get(result.event_type)!.push({ driver_id: result.driver_id });
+    }
+    const alreadySynced = new Set(
+      [...resultDriversByEvent.entries()]
+        .filter(([, rows]) => hasCompleteResults(race.id, rows))
+        .map(([eventType]) => eventType)
+    );
+    for (const eventType of alreadySynced) {
+      syncedSessions.push({ raceId: String(race.id), eventType: eventType as EventType });
+    }
 
     // Retry any session that has started but still has no results in the DB (within the 14-day window).
     const nowMs = Date.now();
@@ -174,7 +192,7 @@ async function syncResultsOpenF1() {
     }
 
     // Fetch all eligible events in parallel
-    await Promise.allSettled(
+    const outcomes = await Promise.allSettled(
       eventsToSync.map(async ({ eventType }) => {
         let rows: { driver_number: string; position: number }[] = [];
         let openf1Count = 0;
@@ -229,6 +247,7 @@ async function syncResultsOpenF1() {
 
         // ── Upsert results ────────────────────────────────
         let rowsUpserted = 0;
+        let upsertError: string | null = null;
         if (rows.length) {
           const upsertRows = rows
             .filter(r => r.position >= 1 && r.position <= 22)
@@ -246,6 +265,8 @@ async function syncResultsOpenF1() {
 
             if (error) {
               console.error(`[${race.id}/${eventType}] Upsert failed: ${error.message}`);
+              errorMsg += ` Upsert: ${error.message}`;
+              upsertError = error.message;
             } else {
               rowsUpserted = upsertRows.length;
               console.log(`[${race.id}/${eventType}] Saved ${rowsUpserted} results ✓`);
@@ -256,7 +277,7 @@ async function syncResultsOpenF1() {
         }
 
         // ── Log every attempt so we can measure API publish delay ─
-        await supabaseAdmin.from("results_sync_log").insert({
+        const { error: logError } = await supabaseAdmin.from("results_sync_log").insert({
           race_id: race.id,
           event_type: eventType,
           openf1_count: openf1Count,
@@ -265,9 +286,42 @@ async function syncResultsOpenF1() {
           source,
           error: errorMsg || null
         });
+        if (logError) throw new Error(`[${race.id}/${eventType}] sync log: ${logError.message}`);
+
+        if (upsertError) throw new Error(`[${race.id}/${eventType}] ${upsertError}`);
+        if (!rowsUpserted) return null;
+
+        const { data: savedResults, error: savedResultsError } = await supabaseAdmin
+          .from("results")
+          .select("driver_id")
+          .eq("race_id", race.id)
+          .eq("event_type", eventType);
+        if (savedResultsError) {
+          throw new Error(`[${race.id}/${eventType}] verify results: ${savedResultsError.message}`);
+        }
+
+        if (!hasCompleteResults(race.id, savedResults ?? [])) {
+          console.log(`[${race.id}/${eventType}] Results still partial — will retry`);
+          return null;
+        }
+
+        return { raceId: String(race.id), eventType } satisfies SyncedSession;
       })
     );
+    const completed = outcomes
+      .filter((outcome): outcome is PromiseFulfilledResult<SyncedSession | null> => outcome.status === "fulfilled")
+      .map((outcome) => outcome.value);
+    const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+    for (const outcome of rejected) {
+      console.error(`[${race.id}] Session sync failed:`, outcome.reason);
+    }
+    if (rejected.length === outcomes.length) {
+      throw new Error(`[${race.id}] All eligible session syncs failed`);
+    }
+    syncedSessions.push(...completed.filter((session): session is SyncedSession => session !== null));
   }
+
+  return syncedSessions;
 }
 
 export async function syncResults() {
@@ -279,9 +333,45 @@ export async function syncResults() {
     syncResultsJolpi()
   ]);
 
-  if (openF1Result.status === "rejected") console.error("OpenF1 sync failed:", openF1Result.reason);
-  if (jolpiResult.status === "rejected") console.error("Jolpi sync failed:", jolpiResult.reason);
+  const sourceWarnings: string[] = [];
+  if (openF1Result.status === "rejected") {
+    console.error("OpenF1 sync failed:", openF1Result.reason);
+    sourceWarnings.push(`OpenF1: ${String(openF1Result.reason)}`);
+  }
+  if (jolpiResult.status === "rejected") {
+    console.error("Jolpi sync failed:", jolpiResult.reason);
+    sourceWarnings.push(`Jolpi: ${String(jolpiResult.reason)}`);
+  }
+  if (openF1Result.status === "rejected" && jolpiResult.status === "rejected") {
+    throw new Error(sourceWarnings.join("; "));
+  }
 
-  await recomputeAllScores();
+  const sessions = [
+    ...(openF1Result.status === "fulfilled" ? openF1Result.value : []),
+    ...(jolpiResult.status === "fulfilled" ? jolpiResult.value : [])
+  ];
+  const uniqueSessions = new Map(
+    sessions.map((session) => [`${session.raceId}:${session.eventType}`, session])
+  );
+  const raceIds = new Set(sessions.map((session) => session.raceId));
+
+  let scoreRows = 0;
+  let weekendRows = 0;
+  const failures: string[] = [];
+  for (const raceId of raceIds) {
+    const recompute = await recomputeRaceScores(raceId);
+    scoreRows += recompute.scoreRows;
+    weekendRows += recompute.weekendRows;
+    failures.push(...recompute.errors);
+  }
+
+  if (failures.length) throw new Error(failures.join("; "));
+
   console.log("syncResults complete");
+  return {
+    syncedSessions: uniqueSessions.size,
+    scoreRows,
+    weekendRows,
+    warnings: sourceWarnings
+  };
 }

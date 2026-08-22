@@ -11,9 +11,9 @@ export async function GET(request: Request) {
 
   const runId = await startCronRun("sync-results");
   try {
-    await syncResults();
-    await endCronRun(runId, "ok");
-    return NextResponse.json({ ok: true });
+    const summary = await syncResults();
+    await endCronRun(runId, "ok", { summary });
+    return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
     console.error("sync-results cron error:", err);
     await endCronRun(runId, "error", { error: String(err) });
