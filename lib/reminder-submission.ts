@@ -29,7 +29,8 @@ export async function userHasCompletePicks(
   supabase: AdminClient,
   userId: string,
   raceId: string,
-  eventType: EventType
+  eventType: EventType,
+  onDebug?: (result: { count: number | null; error: string | null; required: number }) => void
 ): Promise<boolean> {
   const { count, error } = await supabase
     .from("predictions")
@@ -37,6 +38,15 @@ export async function userHasCompletePicks(
     .eq("user_id", userId)
     .eq("race_id", raceId)
     .eq("event_type", eventType);
+
+  onDebug?.({
+    count,
+    error: error?.message ?? null,
+    required: PICKS_REQUIRED[eventType]
+  });
+  // #region agent log
+  fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:`${raceId}-${eventType}`,hypothesisId:'H3',location:'lib/reminder-submission.ts:47',message:'Per-user prediction count result',data:{raceId,eventType,count,error:error?.message??null,required:PICKS_REQUIRED[eventType]},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   if (error) {
     console.error(`userHasCompletePicks failed for ${userId} ${raceId} ${eventType}:`, error);

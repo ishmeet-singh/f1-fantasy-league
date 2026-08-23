@@ -27,6 +27,8 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseAdmin();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://f1-fantasy-league-lilac.vercel.app";
+  const debugRunId = `reminder-${Date.now()}`;
+  const debugSummary: Record<string, unknown>[] = [];
 
   // Fetch upcoming races, then keep any with a session in the reminder window.
   // Must check sprint_start too — on sprint weekends sprint is *before* quali, so
@@ -48,6 +50,10 @@ export async function GET(request: Request) {
 
   const { data: allUsers } = await supabase.from("users").select("id,email,display_name");
   if (!allUsers?.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
+
+  // #region agent log
+  fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:debugRunId,hypothesisId:'H5',location:'app/api/cron/send-reminders/route.ts:52',message:'Reminder runtime identity',data:{commit:process.env.VERCEL_GIT_COMMIT_SHA?.slice(0,7)??null,raceCount:races.length,userCount:allUsers.length},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   let sent = 0;
   let skipped = 0;
@@ -71,13 +77,21 @@ export async function GET(request: Request) {
         const label = intervalLabel(intervalMins);
 
         // Find users who have NOT submitted a complete pick set for this session
-        const { data: submitted } = await supabase
+        const { data: submitted, error: submittedError } = await supabase
           .from("predictions")
           .select("user_id")
           .eq("race_id", race.id)
           .eq("event_type", eventType);
 
         const submittedIds = usersWithCompletePicks(submitted ?? [], eventType);
+        const submissionCounts = new Map<string, number>();
+        for (const row of submitted ?? []) {
+          submissionCounts.set(row.user_id, (submissionCounts.get(row.user_id) ?? 0) + 1);
+        }
+
+        // #region agent log
+        fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:debugRunId,hypothesisId:'H1,H2',location:'app/api/cron/send-reminders/route.ts:90',message:'Bulk submission query result',data:{raceId:race.id,eventType,intervalLabel:label,error:submittedError?.message??null,rowCount:submitted?.length??0,perUserCounts:[...submissionCounts.values()].sort((a,b)=>a-b),completeUserCount:submittedIds.size},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
 
         // Find users who already got this reminder
         const { data: alreadySent } = await supabase
@@ -92,11 +106,38 @@ export async function GET(request: Request) {
         const targets = allUsers.filter(
           (u) => !submittedIds.has(u.id) && !alreadySentIds.has(u.id)
         );
+        const preSendChecks: { count: number | null; error: string | null; required: number }[] = [];
+        debugSummary.push({
+          raceId: race.id,
+          eventType,
+          intervalLabel: label,
+          commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+          submittedError: submittedError?.message ?? null,
+          submittedRows: submitted?.length ?? 0,
+          perUserCounts: [...submissionCounts.values()].sort((a, b) => a - b),
+          completeUsers: submittedIds.size,
+          targets: targets.length,
+          preSendChecks
+        });
+
+        // #region agent log
+        fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:debugRunId,hypothesisId:'H4',location:'app/api/cron/send-reminders/route.ts:119',message:'Reminder target selection',data:{raceId:race.id,eventType,intervalLabel:label,allUsers:allUsers.length,submittedUsers:submittedIds.size,alreadySentUsers:alreadySentIds.size,targetCount:targets.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
 
         for (const user of targets) {
           try {
             // Re-check immediately before send (picks may have landed since the batch query).
-            if (await userHasCompletePicks(supabase, user.id, race.id, eventType)) {
+            const hasCompletePicks = await userHasCompletePicks(
+              supabase,
+              user.id,
+              race.id,
+              eventType,
+              (result) => preSendChecks.push(result)
+            );
+            // #region agent log
+            fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:debugRunId,hypothesisId:'H3',location:'app/api/cron/send-reminders/route.ts:129',message:'Authoritative submission decision',data:{raceId:race.id,eventType,intervalLabel:label,hasCompletePicks},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            if (hasCompletePicks) {
               skipped++;
               continue;
             }
@@ -158,5 +199,8 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent, skipped });
+  // #region agent log
+  fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:debugRunId,hypothesisId:'H1,H2,H3,H4,H5',location:'app/api/cron/send-reminders/route.ts:190',message:'Reminder run outcome',data:{sent,skipped,diagnostics:debugSummary},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  return NextResponse.json({ ok: true, sent, skipped, debugRunId, diagnostics: debugSummary });
 }
