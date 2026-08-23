@@ -1,0 +1,23 @@
+name: targeted-score-repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      race_id:
+        description: Race ID to recompute from existing picks and results
+        required: true
+        type: string
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recompute one race
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_BASE_URL/api/cron/recompute?raceId=$RACE_ID"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          RACE_ID: ${{ inputs.race_id }}

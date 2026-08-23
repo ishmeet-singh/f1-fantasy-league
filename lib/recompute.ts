@@ -171,21 +171,6 @@ async function upsertInBatches(
   return errors;
 }
 
-async function deleteIncompleteEventScores(
-  raceId: string,
-  incompleteEvents: EventType[]
-): Promise<string[]> {
-  if (!incompleteEvents.length) return [];
-
-  const { error } = await getSupabaseAdmin()
-    .from("scores")
-    .delete()
-    .eq("race_id", raceId)
-    .in("event_type", incompleteEvents);
-
-  return error ? [`scores cleanup for race ${raceId}: ${error.message}`] : [];
-}
-
 async function rebuildWeekendScoresForRace(raceId: string): Promise<{ rows: number; errors: string[] }> {
   const supabase = getSupabaseAdmin();
   const [users, scores] = await Promise.all([
@@ -228,7 +213,10 @@ async function rebuildWeekendScoresForRace(raceId: string): Promise<{ rows: numb
   };
 }
 
-export async function recomputeRaceScores(raceId: string): Promise<ScopedRecomputeResult> {
+export async function recomputeRaceScores(
+  raceId: string,
+  options: { acceptAvailableResults?: boolean } = {}
+): Promise<ScopedRecomputeResult> {
   const supabase = getSupabaseAdmin();
   const { data: race, error: raceError } = await supabase
     .from("race_weekends")
@@ -275,16 +263,11 @@ export async function recomputeRaceScores(raceId: string): Promise<ScopedRecompu
   const sprintWeekend = isSprintWeekend(race);
   const completeEvents = events.filter((eventType) => {
     if (eventType === "sprint" && !sprintWeekend) return false;
-    return hasCompleteResults(raceId, resultsByEvent.get(eventType) ?? []);
-  });
-  const incompleteEvents = events.filter((eventType) => {
     const eventResults = resultsByEvent.get(eventType) ?? [];
-    return eventResults.length > 0 && !completeEvents.includes(eventType);
+    return options.acceptAvailableResults
+      ? eventResults.length > 0
+      : hasCompleteResults(raceId, eventResults);
   });
-  const cleanupErrors = await deleteIncompleteEventScores(raceId, incompleteEvents);
-  if (cleanupErrors.length) {
-    return { raceId, completeEvents, scoreRows: 0, weekendRows: 0, errors: cleanupErrors };
-  }
 
   const scoreRows: ScoreRow[] = [];
   for (const eventType of completeEvents) {
@@ -354,24 +337,7 @@ export async function recomputeAllScores(): Promise<RecomputeResult> {
   }
 
   const built = buildRecomputeRows(races, users, allPreds, allResults);
-  const resultsByRaceAndEvent = new Map<string, Map<string, ResultRow[]>>();
-  for (const result of allResults) {
-    if (!resultsByRaceAndEvent.has(result.race_id)) resultsByRaceAndEvent.set(result.race_id, new Map());
-    const byEvent = resultsByRaceAndEvent.get(result.race_id)!;
-    if (!byEvent.has(result.event_type)) byEvent.set(result.event_type, []);
-    byEvent.get(result.event_type)!.push(result);
-  }
-  const cleanupErrors: string[] = [];
-  for (const [raceId, byEvent] of resultsByRaceAndEvent) {
-    const incompleteEvents = events.filter((eventType) => {
-      const eventResults = byEvent.get(eventType) ?? [];
-      return eventResults.length > 0 && !hasCompleteResults(raceId, eventResults);
-    });
-    cleanupErrors.push(...(await deleteIncompleteEventScores(raceId, incompleteEvents)));
-  }
-
   const errors = [
-    ...cleanupErrors,
     ...(await upsertInBatches("scores", built.scoreRows, "user_id,race_id,event_type")),
     ...(await upsertInBatches("weekend_scores", built.weekendRows, "user_id,race_id"))
   ];

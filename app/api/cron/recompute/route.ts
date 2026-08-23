@@ -1,5 +1,5 @@
 import { assertCronAuthorized } from "@/lib/cron-auth";
-import { recomputeAllScores } from "@/lib/recompute";
+import { recomputeAllScores, recomputeRaceScores } from "@/lib/recompute";
 import { startCronRun, endCronRun } from "@/lib/cron-log";
 import { NextResponse } from "next/server";
 
@@ -11,7 +11,11 @@ export async function GET(request: Request) {
 
   const runId = await startCronRun("recompute");
   try {
-    const result = await recomputeAllScores();
+    const { searchParams } = new URL(request.url);
+    const raceId = searchParams.get("raceId");
+    const result = raceId
+      ? await recomputeRaceScores(raceId, { acceptAvailableResults: true })
+      : await recomputeAllScores();
     if (result.errors.length) {
       await endCronRun(runId, "error", { error: result.errors.join("; "), summary: { ...result } });
       return NextResponse.json({ ok: false, ...result }, { status: 500 });
