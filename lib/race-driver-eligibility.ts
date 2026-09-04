@@ -13,11 +13,19 @@ type RaceDriverOverride = {
 
 /**
  * Confirmed race-entry changes that differ from the season grid.
- * Dutch GP 2026: Hadjar injured; Lawson moves to Red Bull and Tsunoda
- * takes Lawson's Racing Bulls seat.
+ * Dutch and Italian GPs 2026: Hadjar injured; Lawson moves to Red Bull and
+ * Tsunoda takes Lawson's Racing Bulls seat.
  */
 const RACE_DRIVER_OVERRIDES: Record<string, RaceDriverOverride> = {
   "1292": {
+    remove: ["6"],
+    add: [{ id: "22", name: "Yuki Tsunoda", team: "Racing Bulls" }],
+    teams: {
+      "22": "Racing Bulls",
+      "30": "Red Bull Racing"
+    }
+  },
+  "1293": {
     remove: ["6"],
     add: [{ id: "22", name: "Yuki Tsunoda", team: "Racing Bulls" }],
     teams: {
