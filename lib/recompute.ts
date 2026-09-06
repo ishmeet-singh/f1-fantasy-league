@@ -171,6 +171,32 @@ async function upsertInBatches(
   return errors;
 }
 
+export function buildWeekendRowsForRace(
+  raceId: string,
+  users: UserRow[],
+  scores: ScoreRow[]
+): WeekendRow[] {
+  const byUser = new Map<string, { points: number; error: number; exact: number }>();
+  for (const score of scores) {
+    const total = byUser.get(score.user_id) ?? { points: 0, error: 0, exact: 0 };
+    total.points += score.points ?? 0;
+    total.error += score.total_error ?? 0;
+    total.exact += score.exact_matches ?? 0;
+    byUser.set(score.user_id, total);
+  }
+
+  return users.map((user) => {
+    const total = byUser.get(user.id) ?? { points: 0, error: 0, exact: 0 };
+    return {
+      user_id: user.id,
+      race_id: raceId,
+      total_points: total.points,
+      total_error: total.error,
+      exact_matches: total.exact
+    };
+  });
+}
+
 async function rebuildWeekendScoresForRace(raceId: string): Promise<{ rows: number; errors: string[] }> {
   const supabase = getSupabaseAdmin();
   const [users, scores] = await Promise.all([
@@ -187,25 +213,7 @@ async function rebuildWeekendScoresForRace(raceId: string): Promise<{ rows: numb
     )
   ]);
 
-  const byUser = new Map<string, { points: number; error: number; exact: number }>();
-  for (const score of scores) {
-    const total = byUser.get(score.user_id) ?? { points: 0, error: 0, exact: 0 };
-    total.points += score.points ?? 0;
-    total.error += score.total_error ?? 0;
-    total.exact += score.exact_matches ?? 0;
-    byUser.set(score.user_id, total);
-  }
-
-  const rows: WeekendRow[] = users.map((user) => {
-    const total = byUser.get(user.id) ?? { points: 0, error: 0, exact: 0 };
-    return {
-      user_id: user.id,
-      race_id: raceId,
-      total_points: total.points,
-      total_error: total.error,
-      exact_matches: total.exact
-    };
-  });
+  const rows = buildWeekendRowsForRace(raceId, users, scores);
 
   return {
     rows: rows.length,
@@ -225,7 +233,7 @@ export async function recomputeRaceScores(
     .single();
   if (raceError || !race) throw new Error(`race ${raceId}: ${raceError?.message ?? "not found"}`);
 
-  const [predictions, results] = await Promise.all([
+  const [predictions, results, users, existingScores] = await Promise.all([
     fetchAllPages<PredictionRow>(`predictions for race ${raceId}`, (from, to) =>
       supabase
         .from("predictions")
@@ -238,6 +246,17 @@ export async function recomputeRaceScores(
       supabase
         .from("results")
         .select("race_id,event_type,driver_id,actual_position")
+        .eq("race_id", raceId)
+        .order("id")
+        .range(from, to)
+    ),
+    fetchAllPages<UserRow>("users", (from, to) =>
+      supabase.from("users").select("id").order("id").range(from, to)
+    ),
+    fetchAllPages<ScoreRow>(`existing scores for race ${raceId}`, (from, to) =>
+      supabase
+        .from("scores")
+        .select("user_id,race_id,event_type,points,total_error,exact_matches")
         .eq("race_id", raceId)
         .order("id")
         .range(from, to)
@@ -290,13 +309,24 @@ export async function recomputeRaceScores(
     return { raceId, completeEvents, scoreRows: scoreRows.length, weekendRows: 0, errors };
   }
 
-  const weekend = await rebuildWeekendScoresForRace(raceId);
+  const mergedScores = new Map(
+    existingScores.map((score) => [`${score.user_id}:${score.event_type}`, score])
+  );
+  for (const score of scoreRows) {
+    mergedScores.set(`${score.user_id}:${score.event_type}`, score);
+  }
+  const weekendRows = buildWeekendRowsForRace(raceId, users, [...mergedScores.values()]);
+  const weekendErrors = await upsertInBatches(
+    "weekend_scores",
+    weekendRows,
+    "user_id,race_id"
+  );
   return {
     raceId,
     completeEvents,
     scoreRows: scoreRows.length,
-    weekendRows: weekend.rows,
-    errors: weekend.errors
+    weekendRows: weekendRows.length,
+    errors: weekendErrors
   };
 }
 

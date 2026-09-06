@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRecomputeRows, hasCompleteResults } from "./recompute";
+import { buildRecomputeRows, buildWeekendRowsForRace, hasCompleteResults } from "./recompute";
 import { eligibleDriverIdsForRace } from "./race-driver-eligibility";
 import { scoreEvent } from "./scoring";
 
@@ -50,6 +50,43 @@ describe("hasCompleteResults", () => {
 
     expect(hasCompleteResults("jolpi-2026-12", drivers)).toBe(true);
     expect(hasCompleteResults("jolpi-2026-12", drivers.slice(0, -1))).toBe(false);
+  });
+});
+
+describe("buildWeekendRowsForRace", () => {
+  it("preserves historical event scores while replacing a recomputed event", () => {
+    const rows = buildWeekendRowsForRace(
+      "1279",
+      [{ id: "user-1" }],
+      [
+        {
+          user_id: "user-1",
+          race_id: "1279",
+          event_type: "quali",
+          points: 20,
+          total_error: 5,
+          exact_matches: 2
+        },
+        {
+          user_id: "user-1",
+          race_id: "1279",
+          event_type: "race",
+          points: 72,
+          total_error: 7,
+          exact_matches: 4
+        }
+      ]
+    );
+
+    expect(rows).toEqual([
+      {
+        user_id: "user-1",
+        race_id: "1279",
+        total_points: 92,
+        total_error: 12,
+        exact_matches: 6
+      }
+    ]);
   });
 });
 
