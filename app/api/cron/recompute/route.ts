@@ -1,6 +1,7 @@
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import { recomputeAllScores, recomputeRaceScores } from "@/lib/recompute";
 import { startCronRun, endCronRun } from "@/lib/cron-log";
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, ...result }, { status: 500 });
     }
     await endCronRun(runId, "ok", { summary: { ...result } });
+    revalidateTag("weekend-scores");
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("recompute cron error:", err);

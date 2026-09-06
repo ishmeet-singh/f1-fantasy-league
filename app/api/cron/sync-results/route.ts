@@ -1,6 +1,7 @@
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import { syncResults } from "@/lib/sync";
 import { startCronRun, endCronRun } from "@/lib/cron-log";
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
   try {
     const summary = await syncResults();
     await endCronRun(runId, "ok", { summary });
+    if (summary.scoreRows > 0) revalidateTag("weekend-scores");
     return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
     console.error("sync-results cron error:", err);

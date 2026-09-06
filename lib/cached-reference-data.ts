@@ -62,7 +62,7 @@ async function fetchWeekendScoresUncached(): Promise<WeekendScoreTotalRow[]> {
 export const getCachedWeekendScores = unstable_cache(
   fetchWeekendScoresUncached,
   ["weekend-scores-v1"],
-  { revalidate: 60 }
+  { revalidate: 60, tags: ["weekend-scores"] }
 );
 
 /** @alias getCachedWeekendScores */

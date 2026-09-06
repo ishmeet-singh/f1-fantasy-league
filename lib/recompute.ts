@@ -337,14 +337,19 @@ export async function recomputeAllScores(): Promise<RecomputeResult> {
   }
 
   const built = buildRecomputeRows(races, users, allPreds, allResults);
-  const errors = [
-    ...(await upsertInBatches("scores", built.scoreRows, "user_id,race_id,event_type")),
-    ...(await upsertInBatches("weekend_scores", built.weekendRows, "user_id,race_id"))
-  ];
+  const errors = await upsertInBatches("scores", built.scoreRows, "user_id,race_id,event_type");
+  let weekendRows = 0;
+  if (!errors.length) {
+    for (const race of races) {
+      const rebuilt = await rebuildWeekendScoresForRace(race.id);
+      weekendRows += rebuilt.rows;
+      errors.push(...rebuilt.errors);
+    }
+  }
 
   return {
     scoreRows: built.scoreRows.length,
-    weekendRows: built.weekendRows.length,
+    weekendRows,
     sprintWeekendCount: built.sprintWeekendCount,
     fetchedPredictions: allPreds.length,
     fetchedResults: allResults.length,
