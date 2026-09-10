@@ -46,4 +46,17 @@ describe("eligibleDriversForRace", () => {
     });
     expect(drivers.find((driver) => driver.id === "30")?.team).toBe("Red Bull Racing");
   });
+
+  it("keeps the Red Bull and Racing Bulls substitutions for Spain", () => {
+    const drivers = eligibleDriversForRace("1294", storedDrivers);
+
+    expect(eligibleDriverIdsForRace("1294").size).toBe(22);
+    expect(drivers.some((driver) => driver.id === "6")).toBe(false);
+    expect(drivers).toContainEqual({
+      id: "22",
+      name: "Yuki Tsunoda",
+      team: "Racing Bulls"
+    });
+    expect(drivers.find((driver) => driver.id === "30")?.team).toBe("Red Bull Racing");
+  });
 });
