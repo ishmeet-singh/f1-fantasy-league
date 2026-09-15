@@ -1,6 +1,6 @@
 import { fetchDrivers, fetchMeetings, fetchSessionResults, fetchSessionsForMeeting } from "@/lib/openf1";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { hasCompleteResults, recomputeRaceScores } from "@/lib/recompute";
+import { hasCompleteResults, hasScoreableResults, recomputeRaceScores } from "@/lib/recompute";
 import { syncResultsJolpi } from "@/lib/sync-jolpi";
 import {
   findJolpiRoundByDate,
@@ -134,6 +134,7 @@ async function syncResultsOpenF1(): Promise<SyncedSession[]> {
   const supabaseAdmin = getSupabaseAdmin();
   const now = Date.now();
   const syncedSessions: SyncedSession[] = [];
+  const debugRunId = `openf1-sync-${now}`;
 
   // Window: races whose weekend has started (quali is typically 2 days before race)
   // or will start within 3 days (so we catch qualifying before race_start passes).
@@ -185,6 +186,9 @@ async function syncResultsOpenF1(): Promise<SyncedSession[]> {
     const nowMs = Date.now();
 
     const eventsToSync = sessionsReadyToSync(race, nowMs, alreadySynced);
+    // #region agent log
+    fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:debugRunId,hypothesisId:'H1-H2',location:'lib/sync.ts:eventsToSync',message:'Session gate decision',data:{raceId:String(race.id),existingResultCounts:Object.fromEntries([...resultDriversByEvent].map(([event,rows])=>[event,rows.length])),alreadySynced:[...alreadySynced],eventsToSync:eventsToSync.map(event=>event.eventType),schedule:{qualiStart:race.quali_start,sprintStart:race.sprint_start,raceStart:race.race_start},nowMs},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (!eventsToSync.length) {
       console.log(`[${race.id}] All sessions already synced — skipping`);
@@ -293,17 +297,22 @@ async function syncResultsOpenF1(): Promise<SyncedSession[]> {
 
         const { data: savedResults, error: savedResultsError } = await supabaseAdmin
           .from("results")
-          .select("driver_id")
+          .select("driver_id,actual_position")
           .eq("race_id", race.id)
           .eq("event_type", eventType);
         if (savedResultsError) {
           throw new Error(`[${race.id}/${eventType}] verify results: ${savedResultsError.message}`);
         }
 
-        if (!hasCompleteResults(race.id, savedResults ?? [])) {
+        const complete = hasCompleteResults(race.id, savedResults ?? []);
+        const scoreable = hasScoreableResults(race.id, eventType, savedResults ?? []);
+        // #region agent log
+        fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:debugRunId,hypothesisId:'H3',location:'lib/sync.ts:savedResults',message:'Saved result completeness',data:{raceId:String(race.id),eventType,source,apiRowCount:rows.length,rowsUpserted,savedResultCount:(savedResults??[]).length,savedDriverIds:(savedResults??[]).map(row=>String(row.driver_id)),complete,scoreable},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (!complete) {
           console.log(`[${race.id}/${eventType}] Results still partial — will retry`);
-          return null;
         }
+        if (!scoreable) return null;
 
         return { raceId: String(race.id), eventType } satisfies SyncedSession;
       })
@@ -354,6 +363,9 @@ export async function syncResults() {
     sessions.map((session) => [`${session.raceId}:${session.eventType}`, session])
   );
   const raceIds = new Set(sessions.map((session) => session.raceId));
+  // #region agent log
+  fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:`sync-results-${Date.now()}`,hypothesisId:'H4',location:'lib/sync.ts:sourceOutcomes',message:'Sync sources selected recompute races',data:{openF1Status:openF1Result.status,jolpiStatus:jolpiResult.status,sessions:[...uniqueSessions.values()],raceIds:[...raceIds],sourceWarnings},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   let scoreRows = 0;
   let weekendRows = 0;

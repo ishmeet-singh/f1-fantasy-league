@@ -72,6 +72,21 @@ export function hasCompleteResults(
   return [...expected].every((driverId) => actual.has(driverId));
 }
 
+export function hasScoreableResults(
+  raceId: string,
+  eventType: EventType,
+  results: ReadonlyArray<{ driver_id: string; actual_position?: number }>
+): boolean {
+  if (eventType !== "quali") return hasCompleteResults(raceId, results);
+
+  const positions = new Set(
+    results
+      .map((row) => row.actual_position)
+      .filter((position): position is number => typeof position === "number")
+  );
+  return [1, 2, 3].every((position) => positions.has(position));
+}
+
 export function buildRecomputeRows(
   races: RaceRow[],
   users: UserRow[],
@@ -121,7 +136,7 @@ export function buildRecomputeRows(
 
         const predictions = predIndex.get(race.id)?.get(eventType)?.get(user.id) ?? [];
         const results = resultIndex.get(race.id)?.get(eventType) ?? [];
-        if (!predictions.length || !hasCompleteResults(race.id, results)) continue;
+        if (!predictions.length || !hasScoreableResults(race.id, eventType, results)) continue;
 
         const score = scoreEvent(eventType, predictions, results, sprintWeekend);
         weekendPoints += score.points;
@@ -285,8 +300,11 @@ export async function recomputeRaceScores(
     const eventResults = resultsByEvent.get(eventType) ?? [];
     return options.acceptAvailableResults
       ? eventResults.length > 0
-      : hasCompleteResults(raceId, eventResults);
+      : hasScoreableResults(raceId, eventType, eventResults);
   });
+  // #region agent log
+  fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:`recompute-${raceId}-${Date.now()}`,hypothesisId:'H3-H5',location:'lib/recompute.ts:completeEvents',message:'Recompute event eligibility',data:{raceId,resultCounts:Object.fromEntries([...resultsByEvent].map(([event,rows])=>[event,rows.length])),resultDriverIds:Object.fromEntries([...resultsByEvent].map(([event,rows])=>[event,rows.map(row=>String(row.driver_id))])),predictionCounts:Object.fromEntries([...predictionsByEventAndUser].map(([event,byUser])=>[event,[...byUser.values()].reduce((count,rows)=>count+rows.length,0)])),predictionUsers:Object.fromEntries([...predictionsByEventAndUser].map(([event,byUser])=>[event,byUser.size])),completeEvents,acceptAvailableResults:Boolean(options.acceptAvailableResults),existingScoreCounts:Object.fromEntries(events.map(event=>[event,existingScores.filter(score=>score.event_type===event).length]))},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   const scoreRows: ScoreRow[] = [];
   for (const eventType of completeEvents) {
@@ -305,6 +323,9 @@ export async function recomputeRaceScores(
   }
 
   const errors = await upsertInBatches("scores", scoreRows, "user_id,race_id,event_type");
+  // #region agent log
+  fetch('http://127.0.0.1:7820/ingest/3bd84e93-aaff-4326-99b7-c8986e7670c1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cb6273'},body:JSON.stringify({sessionId:'cb6273',runId:`recompute-write-${raceId}-${Date.now()}`,hypothesisId:'H5',location:'lib/recompute.ts:scoreUpsert',message:'Score upsert outcome',data:{raceId,completeEvents,scoreRowCount:scoreRows.length,scoreRowsByEvent:Object.fromEntries(events.map(event=>[event,scoreRows.filter(score=>score.event_type===event).length])),errors},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (errors.length) {
     return { raceId, completeEvents, scoreRows: scoreRows.length, weekendRows: 0, errors };
   }

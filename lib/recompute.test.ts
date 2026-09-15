@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildRecomputeRows, buildWeekendRowsForRace, hasCompleteResults } from "./recompute";
+import {
+  buildRecomputeRows,
+  buildWeekendRowsForRace,
+  hasCompleteResults,
+  hasScoreableResults
+} from "./recompute";
 import { eligibleDriverIdsForRace } from "./race-driver-eligibility";
 import { scoreEvent } from "./scoring";
 
@@ -50,6 +55,36 @@ describe("hasCompleteResults", () => {
 
     expect(hasCompleteResults("jolpi-2026-12", drivers)).toBe(true);
     expect(hasCompleteResults("jolpi-2026-12", drivers.slice(0, -1))).toBe(false);
+  });
+});
+
+describe("hasScoreableResults", () => {
+  it("accepts a finalized qualifying classification with non-participants absent", () => {
+    const results = Array.from({ length: 20 }, (_, index) => ({
+      driver_id: String(index + 1),
+      actual_position: index + 1
+    }));
+
+    expect(hasScoreableResults("1294", "quali", results)).toBe(true);
+  });
+
+  it("rejects qualifying results before the podium classification is complete", () => {
+    const results = [
+      { driver_id: "1", actual_position: 1 },
+      { driver_id: "12", actual_position: 2 }
+    ];
+
+    expect(hasScoreableResults("1294", "quali", results)).toBe(false);
+  });
+
+  it("continues to require the complete eligible grid for race results", () => {
+    const results = [...eligibleDriverIdsForRace("1294")].map((driver_id, index) => ({
+      driver_id,
+      actual_position: index + 1
+    }));
+
+    expect(hasScoreableResults("1294", "race", results)).toBe(true);
+    expect(hasScoreableResults("1294", "race", results.slice(0, -1))).toBe(false);
   });
 });
 

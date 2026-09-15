@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { hasCompleteResults } from "@/lib/recompute";
+import { hasCompleteResults, hasScoreableResults } from "@/lib/recompute";
 import {
   fetchJolpiRaces,
   fetchJolpiDriverStandings,
@@ -207,15 +207,16 @@ export async function syncResultsJolpi(): Promise<SyncedSession[]> {
 
         const { data: savedResults, error: savedResultsError } = await supabase
           .from("results")
-          .select("driver_id")
+          .select("driver_id,actual_position")
           .eq("race_id", race.id)
           .eq("event_type", eventType);
         if (savedResultsError) {
           throw new Error(`[jolpi/${race.id}/${eventType}] verify results: ${savedResultsError.message}`);
         }
-        if (hasCompleteResults(String(race.id), savedResults ?? [])) {
+        if (hasScoreableResults(String(race.id), eventType, savedResults ?? [])) {
           syncedSessions.push({ raceId: String(race.id), eventType });
-        } else {
+        }
+        if (!hasCompleteResults(String(race.id), savedResults ?? [])) {
           console.log(`[jolpi/${race.id}/${eventType}] Results still partial — will retry`);
         }
 
