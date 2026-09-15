@@ -1,8 +1,9 @@
 import { requireAdminApi } from "@/lib/admin";
 import { PICKS_REQUIRED } from "@/lib/pick-rules";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { recomputeAllScores } from "@/lib/recompute";
-import { markResultSessionOfficial } from "@/lib/result-sessions";
+import { recomputeRaceScores } from "@/lib/recompute";
+import { replaceSessionResultsAndPublish } from "@/lib/result-sessions";
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -38,21 +39,14 @@ export async function POST(req: Request) {
   async function insertResults(eventType: "quali" | "sprint" | "race", topN: number) {
     const shuffled = shuffle(driverIds);
     const selected = shuffled.slice(0, topN);
-    await supabase.from("results").delete().eq("race_id", raceId).eq("event_type", eventType);
-    const { error } = await supabase.from("results").insert(
-      selected.map((driverId, idx) => ({
-        race_id: raceId,
-        event_type: eventType,
-        driver_id: driverId,
-        actual_position: idx + 1
-      }))
-    );
-    if (error) throw new Error(`Insert ${eventType} results: ${error.message}`);
-    await markResultSessionOfficial({
+    await replaceSessionResultsAndPublish({
       raceId,
       eventType,
       source: "manual",
-      resultCount: selected.length
+      results: selected.map((driverId, index) => ({
+        driverId,
+        actualPosition: index + 1
+      }))
     });
   }
 
@@ -64,7 +58,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 
-  await recomputeAllScores();
+  const recompute = await recomputeRaceScores(raceId);
+  if (recompute.errors.length) {
+    return NextResponse.json({ ok: false, ...recompute }, { status: 500 });
+  }
+  revalidateTag("weekend-scores");
+  revalidateTag("race-completions");
 
-  return NextResponse.json({ ok: true, raceId, driversUsed: driverIds.length });
+  return NextResponse.json({ ok: true, raceId, driversUsed: driverIds.length, recompute });
 }

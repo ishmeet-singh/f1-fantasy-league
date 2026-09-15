@@ -14,7 +14,7 @@ import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
 import { sessionsReadyToSync } from "@/lib/sync-session-gate";
 import { mapJolpiResultsToOpenF1 } from "@/lib/driver-crossref";
 import {
-  markResultSessionOfficial,
+  replaceSessionResultsAndPublish,
   recentlySyncedEventTypes,
   type ResultSessionRow
 } from "@/lib/result-sessions";
@@ -177,40 +177,29 @@ export async function syncResultsJolpi(): Promise<SyncedSession[]> {
         const rows = await getJolpiResultsForRound(year, round, eventType, bulkMap);
         if (!rows.length) continue;
 
-        let resultRows: { race_id: string; event_type: string; driver_id: string; actual_position: number }[];
+        let resultRows: { driverId: string; actualPosition: number }[];
 
         if (isOpenF1Race) {
           resultRows = mapJolpiResultsToOpenF1(rows).map((r) => ({
-            race_id: String(race.id),
-            event_type: eventType,
-            driver_id: r.driver_number,
-            actual_position: r.position
+            driverId: r.driver_number,
+            actualPosition: r.position
           }));
         } else {
           resultRows = rows.map(row => ({
-            race_id: String(race.id),
-            event_type: eventType,
-            driver_id: row.driverId,
-            actual_position: row.position
+            driverId: row.driverId,
+            actualPosition: row.position
           }));
         }
 
         if (!resultRows.length) continue;
 
-        const { error: resultsError } = await supabase
-          .from("results")
-          .upsert(resultRows, { onConflict: "race_id,event_type,driver_id" });
-        if (resultsError) {
-          throw new Error(`[jolpi/${race.id}/${eventType}] upsert error: ${resultsError.message}`);
-        } else {
-          console.log(`[jolpi/${race.id}/${eventType}] saved ${resultRows.length} results`);
-        }
-        await markResultSessionOfficial({
+        const publishedRows = await replaceSessionResultsAndPublish({
           raceId: String(race.id),
           eventType,
           source: "jolpi",
-          resultCount: resultRows.length
+          results: resultRows
         });
+        console.log(`[jolpi/${race.id}/${eventType}] saved ${publishedRows} results`);
 
         const { data: savedResults, error: savedResultsError } = await supabase
           .from("results")

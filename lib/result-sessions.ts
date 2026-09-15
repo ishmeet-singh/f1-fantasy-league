@@ -30,30 +30,31 @@ export function recentlySyncedEventTypes(
   );
 }
 
-export async function markResultSessionOfficial(input: {
+export async function replaceSessionResultsAndPublish(input: {
   raceId: string;
   eventType: EventType;
   source: "openf1" | "jolpi" | "manual";
-  resultCount: number;
-}): Promise<void> {
-  const { error } = await getSupabaseAdmin().from("result_sessions").upsert(
+  results: ReadonlyArray<{ driverId: string; actualPosition: number }>;
+}): Promise<number> {
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "replace_session_results_and_publish",
     {
-      race_id: input.raceId,
-      event_type: input.eventType,
-      status: "official",
-      source: input.source,
-      result_count: input.resultCount,
-      last_synced_at: new Date().toISOString(),
-      score_updated_at: null
-    },
-    { onConflict: "race_id,event_type" }
+      p_race_id: input.raceId,
+      p_event_type: input.eventType,
+      p_source: input.source,
+      p_results: input.results.map((result) => ({
+        driver_id: result.driverId,
+        actual_position: result.actualPosition
+      }))
+    }
   );
 
   if (error) {
     throw new Error(
-      `[${input.raceId}/${input.eventType}] result session status: ${error.message}`
+      `[${input.raceId}/${input.eventType}] result publication: ${error.message}`
     );
   }
+  return Number(data ?? 0);
 }
 
 export async function markRaceSessionsScored(raceId: string): Promise<void> {

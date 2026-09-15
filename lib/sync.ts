@@ -17,7 +17,7 @@ import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
 import { sessionsReadyToSync } from "@/lib/sync-session-gate";
 import { PICKS_REQUIRED } from "@/lib/pick-rules";
 import {
-  markResultSessionOfficial,
+  replaceSessionResultsAndPublish,
   recentlySyncedEventTypes,
   type ResultSessionRow
 } from "@/lib/result-sessions";
@@ -281,31 +281,31 @@ async function syncResultsOpenF1(): Promise<SyncedSession[]> {
           }
         }
 
-        // ── Upsert results ────────────────────────────────
+        // ── Atomically replace and publish results ────────
         let rowsUpserted = 0;
         let upsertError: string | null = null;
         if (rows.length) {
-          const upsertRows = rows
+          const resultRows = rows
             .filter(r => Number.isInteger(r.position) && r.position >= 1)
             .map(r => ({
-              race_id: race.id,
-              event_type: eventType,
-              driver_id: r.driver_number,
-              actual_position: r.position
+              driverId: r.driver_number,
+              actualPosition: r.position
             }));
 
-          if (upsertRows.length) {
-            const { error } = await supabaseAdmin
-              .from("results")
-              .upsert(upsertRows, { onConflict: "race_id,event_type,driver_id" });
-
-            if (error) {
-              console.error(`[${race.id}/${eventType}] Upsert failed: ${error.message}`);
-              errorMsg += ` Upsert: ${error.message}`;
-              upsertError = error.message;
-            } else {
-              rowsUpserted = upsertRows.length;
+          if (resultRows.length && source !== "none") {
+            try {
+              rowsUpserted = await replaceSessionResultsAndPublish({
+                raceId: String(race.id),
+                eventType,
+                source,
+                results: resultRows
+              });
               console.log(`[${race.id}/${eventType}] Saved ${rowsUpserted} results ✓`);
+            } catch (error) {
+              const message = String(error);
+              console.error(`[${race.id}/${eventType}] Publication failed: ${message}`);
+              errorMsg += ` Publication: ${message}`;
+              upsertError = message;
             }
           }
         } else {
@@ -326,16 +326,6 @@ async function syncResultsOpenF1(): Promise<SyncedSession[]> {
 
         if (upsertError) throw new Error(`[${race.id}/${eventType}] ${upsertError}`);
         if (!rowsUpserted) return null;
-
-        if (source === "none") {
-          throw new Error(`[${race.id}/${eventType}] saved results without a source`);
-        }
-        await markResultSessionOfficial({
-          raceId: String(race.id),
-          eventType,
-          source,
-          resultCount: rowsUpserted
-        });
 
         const { data: savedResults, error: savedResultsError } = await supabaseAdmin
           .from("results")

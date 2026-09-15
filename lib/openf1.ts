@@ -22,6 +22,7 @@ type OpenF1Session = {
   session_key: number;
   session_name: string;
   date_start: string;
+  date_end?: string | null;
 };
 
 type OpenF1Classification = {
@@ -82,6 +83,24 @@ export async function fetchSessionsForMeeting(meetingKey: number) {
   return fetchJson<OpenF1Session[]>(`/v1/sessions?meeting_key=${meetingKey}`);
 }
 
+export function isSessionResultPublicationReady(
+  dateEnd: string | null | undefined,
+  nowMs = Date.now()
+): boolean {
+  if (!dateEnd) return false;
+  const sessionEnd = Date.parse(dateEnd);
+  return Number.isFinite(sessionEnd) && nowMs >= sessionEnd + 60 * 60 * 1000;
+}
+
+export function hasPublishedClassificationCoverage(
+  classificationDriverIds: ReadonlyArray<string>,
+  sessionDriverIds: ReadonlyArray<string>
+): boolean {
+  const classified = new Set(classificationDriverIds).size;
+  const sessionDrivers = new Set(sessionDriverIds).size;
+  return sessionDrivers > 0 && classified >= sessionDrivers;
+}
+
 export async function fetchSessionResults(meetingKey: number, eventType: EventType) {
   const sessionName = eventType === "quali" ? "Qualifying" : eventType === "sprint" ? "Sprint" : "Race";
   const sessions = await fetchJson<OpenF1Session[]>(
@@ -89,8 +108,28 @@ export async function fetchSessionResults(meetingKey: number, eventType: EventTy
   );
 
   if (!sessions[0]?.session_key) return [];
+  if (!isSessionResultPublicationReady(sessions[0].date_end)) {
+    return [];
+  }
 
-  const classifications = await fetchJson<OpenF1Classification[]>(`/v1/session_result?session_key=${sessions[0].session_key}`);
+  const [classifications, sessionDrivers] = await Promise.all([
+    fetchJson<OpenF1Classification[]>(`/v1/session_result?session_key=${sessions[0].session_key}`),
+    fetchJson<OpenF1Driver[]>(`/v1/drivers?session_key=${sessions[0].session_key}`)
+  ]);
+  const sessionDriverCount = new Set(
+    sessionDrivers.map((driver) => String(driver.driver_number))
+  ).size;
+  if (
+    !hasPublishedClassificationCoverage(
+      classifications.map((row) => String(row.driver_number)),
+      sessionDrivers.map((driver) => String(driver.driver_number))
+    )
+  ) {
+    console.warn(
+      `[OpenF1/${sessions[0].session_key}] Classification is not stable yet (${classifications.length}/${sessionDriverCount} drivers)`
+    );
+    return [];
+  }
   return classifications.flatMap((row) => {
     const position = Number(row.position);
     if (!Number.isInteger(position) || position < 1) {
