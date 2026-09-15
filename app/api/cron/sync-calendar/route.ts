@@ -1,6 +1,7 @@
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import { syncCalendar } from "@/lib/sync";
 import { startCronRun, endCronRun } from "@/lib/cron-log";
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ export async function GET(request: Request) {
   try {
     await syncCalendar();
     await endCronRun(runId, "ok");
+    revalidateTag("race-weekends");
+    revalidateTag("drivers");
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("sync-calendar cron error:", err);

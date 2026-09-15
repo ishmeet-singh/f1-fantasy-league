@@ -6,6 +6,7 @@ import { LocalTime } from "@/components/local-time";
 import { AdminPicksRaceSelector } from "@/components/admin-picks-race-selector";
 import { RacePageSkeleton } from "@/components/race-page-skeleton";
 import { F1 } from "@/lib/f1-theme";
+import { PICKS_REQUIRED } from "@/lib/pick-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ async function AdminPicksContent({ raceId }: { raceId?: string }) {
   const [{ data: races }, { data: users }] = await Promise.all([
     supabase
       .from("race_weekends")
-      .select("id,grand_prix,race_start,has_sprint")
+      .select("id,grand_prix,race_start,has_sprint,sprint_start")
       .order("race_start", { ascending: true }),
     supabase.from("users").select("id,email,display_name").order("created_at", { ascending: true })
   ]);
@@ -111,10 +112,12 @@ async function AdminPicksContent({ raceId }: { raceId?: string }) {
     if (!entry.last_at || (p.created_at && p.created_at > entry.last_at)) entry.last_at = p.created_at;
   }
 
-  const events: EventType[] = selectedRace.has_sprint ? ["quali", "sprint", "race"] : ["quali", "race"];
+  const events: EventType[] = selectedRace.sprint_start ? ["quali", "sprint", "race"] : ["quali", "race"];
   const totalUsers = (users ?? []).length;
   const totalSubmitted = events.reduce((sum, et) => {
-    const count = (users ?? []).filter((u) => byUser.get(u.id)?.[et]?.picks.length).length;
+    const count = (users ?? []).filter(
+      (u) => byUser.get(u.id)?.[et]?.picks.length === PICKS_REQUIRED[et]
+    ).length;
     return sum + count;
   }, 0);
   const totalSlots = totalUsers * events.length;
@@ -153,7 +156,7 @@ async function AdminPicksContent({ raceId }: { raceId?: string }) {
               <span className="text-lg font-semibold text-white/50">/{totalSlots}</span>
             </p>
           </div>
-          {selectedRace.has_sprint && (
+          {Boolean(selectedRace.sprint_start) && (
             <span
               className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide"
               style={{ background: "rgba(211,20,17,0.2)", color: F1.red }}
@@ -180,7 +183,9 @@ async function AdminPicksContent({ raceId }: { raceId?: string }) {
       </section>
 
       {events.map((et) => {
-        const submittedCount = (users ?? []).filter((u) => byUser.get(u.id)?.[et]?.picks.length).length;
+        const submittedCount = (users ?? []).filter(
+          (u) => byUser.get(u.id)?.[et]?.picks.length === PICKS_REQUIRED[et]
+        ).length;
         const allIn = submittedCount === totalUsers && totalUsers > 0;
         const someIn = submittedCount > 0;
 
@@ -221,7 +226,9 @@ async function AdminPicksContent({ raceId }: { raceId?: string }) {
                 <tbody>
                   {(users ?? []).map((u, i) => {
                     const entry = byUser.get(u.id)?.[et];
-                    const hasSubmitted = (entry?.picks.length ?? 0) > 0;
+                    const pickCount = entry?.picks.length ?? 0;
+                    const hasSubmitted = pickCount === PICKS_REQUIRED[et];
+                    const hasPartialSubmission = pickCount > 0 && !hasSubmitted;
                     return (
                       <tr
                         key={u.id}
@@ -246,6 +253,13 @@ async function AdminPicksContent({ raceId }: { raceId?: string }) {
                             >
                               ✓ Submitted
                             </span>
+                          ) : hasPartialSubmission ? (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                              style={{ background: "#FFFBEB", color: "#92400E", border: "1px solid #FDE68A" }}
+                            >
+                              {pickCount}/{PICKS_REQUIRED[et]} incomplete
+                            </span>
                           ) : (
                             <span
                               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
@@ -260,7 +274,7 @@ async function AdminPicksContent({ raceId }: { raceId?: string }) {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {hasSubmitted ? (
+                          {pickCount > 0 ? (
                             <div className="space-y-1">
                               {entry!.picks
                                 .sort((a, b) => a.predicted_position - b.predicted_position)

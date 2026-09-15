@@ -13,7 +13,10 @@ const schema = z.object({ confirm: z.literal(true) });
 export async function POST(req: Request) {
   const auth = requireAdminApi();
   if (auth instanceof NextResponse) return auth;
-  schema.parse(await req.json());
+  const parsed = schema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Explicit confirmation is required" }, { status: 400 });
+  }
 
   const supabase = getSupabaseAdmin();
   const preview = await listCancelledRaceRowsInDb(supabase);

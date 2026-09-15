@@ -30,7 +30,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = requireAdminApi();
   if (auth instanceof NextResponse) return auth;
-  const body = addSchema.parse(await req.json());
+  const parsed = addSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: "A valid email is required" }, { status: 400 });
+  }
+  const body = parsed.data;
   const supabase = getSupabaseAdmin();
 
   // Try to create; if already exists, still return success so it's idempotent
@@ -58,7 +62,14 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const auth = requireAdminApi();
   if (auth instanceof NextResponse) return auth;
-  const body = removeSchema.parse(await req.json());
+  const parsed = removeSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: "A valid user ID is required" }, { status: 400 });
+  }
+  const body = parsed.data;
+  if (body.userId === auth.id) {
+    return NextResponse.json({ error: "You cannot remove your own admin account" }, { status: 400 });
+  }
   const supabase = getSupabaseAdmin();
 
   const { error } = await supabase.auth.admin.deleteUser(body.userId);

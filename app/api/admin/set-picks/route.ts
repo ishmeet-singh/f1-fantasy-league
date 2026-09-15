@@ -16,7 +16,11 @@ const schema = z.object({
 export async function POST(req: Request) {
   const auth = requireAdminApi();
   if (auth instanceof NextResponse) return auth;
-  const body = schema.parse(await req.json());
+  const parsed = schema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid player, race, session, or picks" }, { status: 400 });
+  }
+  const body = parsed.data;
   const admin = getSupabaseAdmin();
 
   const { data: player } = await admin

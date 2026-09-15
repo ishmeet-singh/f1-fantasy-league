@@ -44,11 +44,12 @@ async function fetchDriversUncached(): Promise<DriverRow[]> {
 export const getCachedRaceWeekends = unstable_cache(
   fetchRaceWeekendsUncached,
   ["race-weekends-v1"],
-  { revalidate: 60 }
+  { revalidate: 60, tags: ["race-weekends"] }
 );
 
 export const getCachedDrivers = unstable_cache(fetchDriversUncached, ["drivers-v1"], {
-  revalidate: 60
+  revalidate: 60,
+  tags: ["drivers"]
 });
 
 async function fetchWeekendScoresUncached(): Promise<WeekendScoreTotalRow[]> {

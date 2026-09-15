@@ -1,7 +1,8 @@
 import { assertAdmin } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { AdminPanel } from "@/components/admin-panel";
+import { AdminPanel, type AdminHealth } from "@/components/admin-panel";
 import { F1 } from "@/lib/f1-theme";
+import { eligibleDriversForRace } from "@/lib/race-driver-eligibility";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -10,18 +11,57 @@ export default async function AdminPage() {
   await assertAdmin();
   const supabase = getSupabaseAdmin();
 
-  const [{ data: users }, { data: upcomingRaces }, { data: allRaces }, { data: drivers }] =
+  const [
+    { data: users },
+    { data: upcomingRaces },
+    { data: allRaces },
+    { data: drivers },
+    { data: raceEntries },
+    { data: healthData }
+  ] =
     await Promise.all([
       supabase.from("users").select("id,email,display_name,created_at").order("created_at", { ascending: true }),
-      supabase.from("race_weekends").select("id,grand_prix,race_start,has_sprint")
+      supabase.from("race_weekends").select("id,grand_prix,race_start,has_sprint,sprint_start")
         .gte("race_start", new Date().toISOString())
         .order("race_start", { ascending: true })
         .limit(5),
-      supabase.from("race_weekends").select("id,grand_prix,race_start,has_sprint").order("race_start", {
+      supabase.from("race_weekends").select("id,grand_prix,race_start,has_sprint,sprint_start").order("race_start", {
         ascending: true
       }),
-      supabase.from("drivers").select("id,name,team").order("name")
+      supabase.from("drivers").select("id,name,team").order("name"),
+      supabase.from("race_entries").select("race_id,driver_id,driver_name,team"),
+      supabase.rpc("admin_scoring_health")
     ]);
+
+  const health = (
+    healthData
+      ? { ...(healthData as Omit<AdminHealth, "available">), available: true }
+      : {
+          available: false,
+          scoreRows: 0,
+          weekendRows: 0,
+          officialSessions: 0,
+          pendingSessions: 0,
+          aggregateMismatches: 0,
+          lastSync: null
+        }
+  ) as AdminHealth;
+
+  const allRaceOptions = (allRaces ?? []).map((race) => {
+    const entries = (raceEntries ?? []).filter((entry) => entry.race_id === race.id);
+    return {
+      ...race,
+      drivers: entries.length
+        ? entries
+            .map((entry) => ({
+              id: entry.driver_id,
+              name: entry.driver_name,
+              team: entry.team
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        : eligibleDriversForRace(race.id, drivers ?? [])
+    };
+  });
 
   return (
     <>
@@ -53,8 +93,9 @@ export default async function AdminPage() {
       <AdminPanel
         initialPlayers={users || []}
         upcomingRaces={upcomingRaces || []}
-        allRaces={allRaces || []}
+        allRaces={allRaceOptions}
         drivers={drivers || []}
+        health={health}
       />
     </>
   );

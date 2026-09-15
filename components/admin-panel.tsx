@@ -2,10 +2,32 @@
 
 import { useState } from "react";
 import { F1 } from "@/lib/f1-theme";
+import { PICKS_REQUIRED } from "@/lib/pick-rules";
 
 type Player = { id: string; email: string; display_name: string | null; created_at: string };
-type RaceOption = { id: string; grand_prix: string; race_start: string; has_sprint: boolean };
+type RaceOption = {
+  id: string;
+  grand_prix: string;
+  race_start: string;
+  has_sprint: boolean;
+  sprint_start: string | null;
+  drivers?: DriverOption[];
+};
 type DriverOption = { id: string; name: string; team: string };
+export type AdminHealth = {
+  available: boolean;
+  scoreRows: number;
+  weekendRows: number;
+  officialSessions: number;
+  pendingSessions: number;
+  aggregateMismatches: number;
+  lastSync: {
+    status: string;
+    started_at: string;
+    finished_at: string | null;
+    error: string | null;
+  } | null;
+};
 
 const TEST_RACE_ID = "test-race-2099";
 
@@ -29,6 +51,32 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function CollapsibleSection({
+  title,
+  summary,
+  children
+}: {
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="rounded-2xl bg-white p-4" style={{ boxShadow: F1.cardShadow }}>
+      <summary className="cursor-pointer list-none">
+        <h2 className="inline text-base font-bold" style={{ color: F1.carbon }}>
+          {title}
+        </h2>
+        <p className="mt-1 text-sm" style={{ color: F1.carbonLight }}>
+          {summary}
+        </p>
+      </summary>
+      <div className="mt-4 space-y-4 border-t pt-4" style={{ borderColor: F1.gridLine }}>
+        {children}
+      </div>
+    </details>
+  );
+}
+
 function StatusMsg({ status, error }: { status: string; error: string }) {
   if (!status && !error) return null;
   return error ? (
@@ -46,12 +94,14 @@ export function AdminPanel({
   initialPlayers,
   upcomingRaces = [],
   allRaces = [],
-  drivers = []
+  drivers = [],
+  health
 }: {
   initialPlayers: Player[];
   upcomingRaces?: RaceOption[];
   allRaces?: RaceOption[];
   drivers?: DriverOption[];
+  health: AdminHealth;
 }) {
   const [players, setPlayers] = useState<Player[]>(initialPlayers);
   const [newEmail, setNewEmail] = useState("");
@@ -75,12 +125,10 @@ export function AdminPanel({
 
   const [setPicksEmail, setSetPicksEmail] = useState("");
   const [setPicksRaceId, setSetPicksRaceId] = useState(
-    () => allRaces.find((r) => r.grand_prix.toLowerCase().includes("canada"))?.id ?? allRaces[0]?.id ?? ""
+    () => upcomingRaces[0]?.id ?? allRaces[0]?.id ?? ""
   );
   const [setPicksEvent, setSetPicksEvent] = useState<"quali" | "sprint" | "race">("quali");
-  const [setPicksP1, setSetPicksP1] = useState("");
-  const [setPicksP2, setSetPicksP2] = useState("");
-  const [setPicksP3, setSetPicksP3] = useState("");
+  const [setPicks, setSetPicks] = useState<string[]>(() => Array(PICKS_REQUIRED.race).fill(""));
   const [setPicksStatus, setSetPicksStatus] = useState("");
   const [setPicksError, setSetPicksError] = useState("");
   const [setPicksLoading, setSetPicksLoading] = useState(false);
@@ -173,8 +221,14 @@ export function AdminPanel({
   }
 
   async function submitSetPicks() {
-    if (!setPicksEmail.trim() || !setPicksRaceId || !setPicksP1 || !setPicksP2 || !setPicksP3) {
-      setSetPicksError("Email, race, and all three positions are required");
+    const required = PICKS_REQUIRED[setPicksEvent];
+    const selectedPicks = setPicks.slice(0, required);
+    if (!setPicksEmail.trim() || !setPicksRaceId || selectedPicks.some((driverId) => !driverId)) {
+      setSetPicksError(`Email, race, and all ${required} positions are required`);
+      return;
+    }
+    if (new Set(selectedPicks).size !== selectedPicks.length) {
+      setSetPicksError("Each driver can only be selected once");
       return;
     }
     setSetPicksLoading(true);
@@ -188,7 +242,9 @@ export function AdminPanel({
           email: setPicksEmail.trim(),
           raceId: setPicksRaceId,
           eventType: setPicksEvent,
-          picks: { "1": setPicksP1, "2": setPicksP2, "3": setPicksP3 }
+          picks: Object.fromEntries(
+            selectedPicks.map((driverId, index) => [String(index + 1), driverId])
+          )
         })
       });
       const json = await res.json();
@@ -201,6 +257,14 @@ export function AdminPanel({
   }
 
   async function manualAction(endpoint: string, label: string) {
+    if (
+      endpoint === "/api/admin/recompute" &&
+      !confirm(
+        "Rebuild every historical score from stored official results? Use this only for a verified scoring repair."
+      )
+    ) {
+      return;
+    }
     setSyncLoading(label);
     setSyncStatus("");
     setSyncError("");
@@ -216,6 +280,14 @@ export function AdminPanel({
         setSyncStatus(
           `${label} complete — ${json.scoreRows} session scores, ${json.sprintWeekendCount} sprint weekend(s) in calendar`
         );
+      } else if (label === "Sync results") {
+        setSyncStatus(
+          json.syncedSessions > 0
+            ? `Official results checked — ${json.syncedSessions} session(s), ${json.scoreRows} score row(s) updated`
+            : "Check complete — no new official results were ready"
+        );
+      } else if (label === "Sync calendar") {
+        setSyncStatus("Calendar, drivers, and future race entries refreshed");
       } else {
         setSyncStatus(`${label} complete`);
       }
@@ -284,10 +356,73 @@ export function AdminPanel({
     }
   }
 
+  const setPicksRequired = PICKS_REQUIRED[setPicksEvent];
+  const selectedRaceDrivers =
+    allRaces.find((race) => race.id === setPicksRaceId)?.drivers ?? drivers;
+  const scoringHealthy =
+    health.available && health.aggregateMismatches === 0 && health.pendingSessions === 0;
+
   return (
     <div className="space-y-4">
+      <Section title="System status">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl p-3" style={{ background: scoringHealthy ? "#ECFDF5" : "#FEF2F2" }}>
+            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
+              Scoring data
+            </p>
+            <p className="mt-1 font-bold" style={{ color: scoringHealthy ? "#166534" : F1.red }}>
+              {scoringHealthy ? "Healthy" : health.available ? "Needs attention" : "Unavailable"}
+            </p>
+            <p className="mt-1 text-xs" style={{ color: F1.carbonLight }}>
+              {health.aggregateMismatches} aggregate mismatches · {health.pendingSessions} pending sessions
+            </p>
+          </div>
+          <div className="rounded-xl p-3" style={{ background: F1.offWhite }}>
+            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
+              Last result sync
+            </p>
+            <p className="mt-1 font-bold" style={{ color: health.lastSync?.status === "ok" ? "#166534" : F1.carbon }}>
+              {health.lastSync?.status === "ok" ? "Successful" : health.lastSync ? "Failed" : "No run recorded"}
+            </p>
+            {health.lastSync?.started_at && (
+              <p className="mt-1 text-xs" style={{ color: F1.carbonLight }}>
+                {new Date(health.lastSync.started_at).toLocaleString()}
+              </p>
+            )}
+          </div>
+          <div className="rounded-xl p-3" style={{ background: F1.offWhite }}>
+            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonLight }}>
+              Published data
+            </p>
+            <p className="mt-1 font-bold" style={{ color: F1.carbon }}>
+              {health.officialSessions} official sessions
+            </p>
+            <p className="mt-1 text-xs" style={{ color: F1.carbonLight }}>
+              {health.scoreRows} session scores · {health.weekendRows} weekend totals
+            </p>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="What to use">
+        <div className="grid gap-3 text-sm sm:grid-cols-3">
+          <div className="rounded-xl p-3" style={{ background: "#ECFDF5", color: "#166534" }}>
+            <strong className="block">Automatic</strong>
+            Calendar updates, result sync, scoring, and scheduled reminders normally need no action.
+          </div>
+          <div className="rounded-xl p-3" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>
+            <strong className="block">Routine check</strong>
+            Use Pick Monitor to confirm submissions. Run result sync only when published results are delayed.
+          </div>
+          <div className="rounded-xl p-3" style={{ background: "#FFFBEB", color: "#92400E" }}>
+            <strong className="block">Exception only</strong>
+            Backfills, full score rebuilds, and test tools change data. Use them for a specific verified reason.
+          </div>
+        </div>
+      </Section>
+
       {/* Players */}
-      <Section title="Players">
+      <Section title="Player access">
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             type="email"
@@ -374,10 +509,10 @@ export function AdminPanel({
 
       {/* Backfill picks */}
       {allRaces.length > 0 && drivers.length > 0 && (
-        <Section title="Backfill player picks">
+        <Section title="Correct missing picks">
           <p className="text-sm" style={{ color: F1.carbonLight }}>
-            Save picks for someone who arranged them but forgot to click Save. Bypasses lock checks (use after
-            quali only if results are not in yet).
+            Exception only. Saves a complete pick set for a player and bypasses normal lock checks. The change
+            uses the real submission time and automatically repairs that race&apos;s scores if results exist.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-sm">
@@ -399,7 +534,11 @@ export function AdminPanel({
               </span>
               <select
                 value={setPicksRaceId}
-                onChange={(e) => setSetPicksRaceId(e.target.value)}
+                onChange={(event) => {
+                  setSetPicksRaceId(event.target.value);
+                  setSetPicksEvent("quali");
+                  setSetPicks(Array(PICKS_REQUIRED.race).fill(""));
+                }}
                 className={fieldClass}
                 style={fieldStyle}
               >
@@ -416,44 +555,59 @@ export function AdminPanel({
               </span>
               <select
                 value={setPicksEvent}
-                onChange={(e) => setSetPicksEvent(e.target.value as "quali" | "sprint" | "race")}
+                onChange={(event) => {
+                  setSetPicksEvent(event.target.value as "quali" | "sprint" | "race");
+                  setSetPicks(Array(PICKS_REQUIRED.race).fill(""));
+                }}
                 className={fieldClass}
                 style={fieldStyle}
               >
                 <option value="quali">Qualifying</option>
-                <option value="sprint">Sprint</option>
+                {allRaces.find((race) => race.id === setPicksRaceId)?.sprint_start && (
+                  <option value="sprint">Sprint</option>
+                )}
                 <option value="race">Race</option>
               </select>
             </label>
           </div>
-          {setPicksEvent === "quali" && (
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(["P1", "P2", "P3"] as const).map((label, i) => {
-                const val = [setPicksP1, setPicksP2, setPicksP3][i];
-                const set = [setSetPicksP1, setSetPicksP2, setSetPicksP3][i];
-                return (
-                  <label key={label} className="space-y-1 text-sm">
-                    <span className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
-                      {label}
-                    </span>
-                    <select
-                      value={val}
-                      onChange={(e) => set(e.target.value)}
-                      className={fieldClass}
-                      style={fieldStyle}
-                    >
-                      <option value="">—</option>
-                      {drivers.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                );
-              })}
-            </div>
-          )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {Array.from({ length: setPicksRequired }, (_, index) => {
+              const value = setPicks[index] ?? "";
+              const selectedElsewhere = new Set(
+                setPicks.slice(0, setPicksRequired).filter((driverId, pickIndex) => pickIndex !== index && driverId)
+              );
+              return (
+                <label key={index} className="space-y-1 text-sm">
+                  <span className="text-xs font-bold uppercase tracking-wide" style={{ color: F1.carbonMid }}>
+                    P{index + 1}
+                  </span>
+                  <select
+                    value={value}
+                    onChange={(event) =>
+                      setSetPicks((current) =>
+                        current.map((driverId, pickIndex) =>
+                          pickIndex === index ? event.target.value : driverId
+                        )
+                      )
+                    }
+                    className={fieldClass}
+                    style={fieldStyle}
+                  >
+                    <option value="">—</option>
+                    {selectedRaceDrivers.map((driver) => (
+                      <option
+                        key={driver.id}
+                        value={driver.id}
+                        disabled={selectedElsewhere.has(driver.id)}
+                      >
+                        {driver.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              );
+            })}
+          </div>
           <button
             type="button"
             onClick={submitSetPicks}
@@ -468,7 +622,10 @@ export function AdminPanel({
       )}
 
       {/* Test Race */}
-      <Section title="Test / demo race">
+      <CollapsibleSection
+        title="Testing tools"
+        summary="Creates disposable data. Keep closed during normal race operations."
+      >
         <p className="text-sm" style={{ color: F1.carbonLight }}>
           Create a dummy race to test the full prediction and scoring flow before a live race.
         </p>
@@ -506,13 +663,14 @@ export function AdminPanel({
           <li>Check the leaderboard to verify scoring</li>
           <li>Click &quot;Clear test race&quot; to remove all test data when done</li>
         </ol>
-      </Section>
+      </CollapsibleSection>
 
       {/* Send Reminder Now */}
       {upcomingRaces.length > 0 && (
-        <Section title="Send reminder now">
+        <Section title="Manual reminder">
           <p className="text-sm" style={{ color: F1.carbonLight }}>
-            Immediately email all players who haven&apos;t submitted picks for a session.
+            Sends an email immediately to every player missing a complete pick set. This is separate from the
+            automatic reminder schedule.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -534,7 +692,7 @@ export function AdminPanel({
               style={fieldStyle}
             >
               <option value="quali">Qualifying</option>
-              {upcomingRaces.find((r) => r.id === reminderRaceId)?.has_sprint && (
+              {upcomingRaces.find((r) => r.id === reminderRaceId)?.sprint_start && (
                 <option value="sprint">Sprint</option>
               )}
               <option value="race">Race</option>
@@ -562,55 +720,68 @@ export function AdminPanel({
       )}
 
       {/* Manual Tools */}
-      <Section title="Manual tools">
-        <p className="text-xs" style={{ color: F1.carbonLight }}>
-          Run &quot;Sync Season Calendar&quot; once to populate all races and drivers from OpenF1. After that, results sync automatically.
+      <Section title="Data operations">
+        <p className="text-sm" style={{ color: F1.carbonLight }}>
+          Results normally sync automatically. This safe action checks started sessions for newly published
+          official results and updates scores only when needed.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={fixDriverNames}
-            disabled={syncLoading !== null}
-            className={`${btnClass} text-white`}
-            style={{ background: "#CA8A04" }}
-          >
-            {syncLoading === "fix-drivers" ? "Fixing…" : "Fix driver names"}
-          </button>
-          <button
-            onClick={testReminder}
-            disabled={syncLoading !== null}
-            className={`${btnClass} text-white`}
-            style={{ background: "#EA580C" }}
-          >
-            {syncLoading === "test-reminder" ? "Sending…" : "Test reminder email"}
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => manualAction("/api/admin/sync-calendar", "Sync calendar")}
-            disabled={syncLoading !== null}
-            className={`${btnClass} text-white`}
-            style={{ background: "#7C3AED" }}
-          >
-            {syncLoading === "Sync calendar" ? "Syncing…" : "Sync season calendar"}
-          </button>
           <button
             onClick={() => manualAction("/api/admin/sync", "Sync results")}
             disabled={syncLoading !== null}
             className={`${btnClass} text-white`}
             style={{ background: "#2563EB" }}
           >
-            {syncLoading === "Sync results" ? "Syncing…" : "Sync race results"}
-          </button>
-          <button
-            onClick={() => manualAction("/api/admin/recompute", "Recompute")}
-            disabled={syncLoading !== null}
-            className={`${btnClass} text-white`}
-            style={{ background: "#166534" }}
-          >
-            {syncLoading === "Recompute" ? "Recomputing…" : "Recompute scores"}
+            {syncLoading === "Sync results" ? "Checking…" : "Check for official results"}
           </button>
         </div>
         <StatusMsg status={syncStatus} error={syncError} />
+
+        <details className="rounded-xl border p-3" style={{ borderColor: F1.gridLine }}>
+          <summary className="cursor-pointer text-sm font-semibold" style={{ color: F1.carbonMid }}>
+            Advanced maintenance
+          </summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-xs" style={{ color: F1.carbonLight }}>
+              Use these only to repair a diagnosed issue. A full score rebuild recalculates every historical
+              race from stored official results and requires confirmation.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => manualAction("/api/admin/sync-calendar", "Sync calendar")}
+                disabled={syncLoading !== null}
+                className={btnClass}
+                style={{ background: F1.white, color: F1.carbon, border: `1px solid ${F1.gridLine}` }}
+              >
+                {syncLoading === "Sync calendar" ? "Refreshing…" : "Refresh calendar & race entries"}
+              </button>
+              <button
+                onClick={() => manualAction("/api/admin/recompute", "Recompute")}
+                disabled={syncLoading !== null}
+                className={btnClass}
+                style={{ background: "#FFF7ED", color: "#9A3412", border: "1px solid #FED7AA" }}
+              >
+                {syncLoading === "Recompute" ? "Rebuilding…" : "Rebuild all historical scores"}
+              </button>
+              <button
+                onClick={fixDriverNames}
+                disabled={syncLoading !== null}
+                className={btnClass}
+                style={{ background: F1.white, color: F1.carbon, border: `1px solid ${F1.gridLine}` }}
+              >
+                {syncLoading === "fix-drivers" ? "Repairing…" : "Repair invalid driver names"}
+              </button>
+              <button
+                onClick={testReminder}
+                disabled={syncLoading !== null}
+                className={btnClass}
+                style={{ background: F1.white, color: F1.carbon, border: `1px solid ${F1.gridLine}` }}
+              >
+                {syncLoading === "test-reminder" ? "Sending…" : "Send test email to me"}
+              </button>
+            </div>
+          </div>
+        </details>
       </Section>
     </div>
   );
