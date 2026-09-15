@@ -116,6 +116,12 @@ export function AdminPanel({
   const [syncStatus, setSyncStatus] = useState("");
   const [syncError, setSyncError] = useState("");
   const [syncLoading, setSyncLoading] = useState<string | null>(null);
+  const [repairRaceId, setRepairRaceId] = useState(
+    () =>
+      [...allRaces].reverse().find((race) => Date.parse(race.race_start) <= Date.now())?.id ??
+      allRaces[0]?.id ??
+      ""
+  );
 
   const [reminderRaceId, setReminderRaceId] = useState(upcomingRaces[0]?.id || "");
   const [reminderEvent, setReminderEvent] = useState<"quali" | "sprint" | "race">("race");
@@ -161,7 +167,13 @@ export function AdminPanel({
   }
 
   async function removePlayer(userId: string, email: string) {
-    if (!confirm(`Remove ${email}? This deletes all their data.`)) return;
+    if (
+      !confirm(
+        `Permanently delete ${email} and all of their picks and scores? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
     setPlayerError("");
     const res = await fetch("/api/admin/players", {
       method: "DELETE",
@@ -256,9 +268,9 @@ export function AdminPanel({
     setSetPicksLoading(false);
   }
 
-  async function manualAction(endpoint: string, label: string) {
+  async function manualAction(endpoint: string, label: string, body?: object) {
     if (
-      endpoint === "/api/admin/recompute" &&
+      label === "Recompute all" &&
       !confirm(
         "Rebuild every historical score from stored official results? Use this only for a verified scoring repair."
       )
@@ -269,16 +281,30 @@ export function AdminPanel({
     setSyncStatus("");
     setSyncError("");
     try {
-      const res = await fetch(endpoint, { method: "POST" });
+      const res = await fetch(endpoint, {
+        method: "POST",
+        ...(body
+          ? {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body)
+            }
+          : {})
+      });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         const detail = json.errors?.length ? json.errors.join("; ") : json.error;
         setSyncError(detail ? `${label} failed: ${detail}` : `${label} failed`);
         return;
       }
-      if (label === "Recompute" && typeof json.sprintWeekendCount === "number") {
+      if (json.degraded && json.warnings?.length) {
+        setSyncError(`Check completed with warnings: ${json.warnings.join("; ")}`);
+      } else if (label === "Recompute all" && typeof json.sprintWeekendCount === "number") {
         setSyncStatus(
-          `${label} complete — ${json.scoreRows} session scores, ${json.sprintWeekendCount} sprint weekend(s) in calendar`
+          `Full rebuild complete — ${json.scoreRows} session scores, ${json.sprintWeekendCount} sprint weekend(s) in calendar`
+        );
+      } else if (label === "Recompute race") {
+        setSyncStatus(
+          `Race repair complete — ${json.scoreRows} session score row(s), ${json.weekendRows} weekend total(s)`
         );
       } else if (label === "Sync results") {
         setSyncStatus(
@@ -495,7 +521,7 @@ export function AdminPanel({
                           className="text-xs font-semibold transition hover:opacity-80"
                           style={{ color: F1.red }}
                         >
-                          Remove
+                          Delete
                         </button>
                       </div>
                     </td>
@@ -744,8 +770,34 @@ export function AdminPanel({
           <div className="mt-3 space-y-3">
             <p className="text-xs" style={{ color: F1.carbonLight }}>
               Use these only to repair a diagnosed issue. A full score rebuild recalculates every historical
-              race from stored official results and requires confirmation.
+              race from stored official results and requires confirmation. Repair one race first whenever
+              possible.
             </p>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <select
+                value={repairRaceId}
+                onChange={(event) => setRepairRaceId(event.target.value)}
+                className={fieldClass}
+                style={fieldStyle}
+                aria-label="Race to repair"
+              >
+                {allRaces.map((race) => (
+                  <option key={race.id} value={race.id}>
+                    {race.grand_prix}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() =>
+                  manualAction("/api/admin/recompute", "Recompute race", { raceId: repairRaceId })
+                }
+                disabled={syncLoading !== null || !repairRaceId}
+                className={`${btnClass} text-white`}
+                style={{ background: "#166534" }}
+              >
+                {syncLoading === "Recompute race" ? "Repairing…" : "Repair selected race"}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => manualAction("/api/admin/sync-calendar", "Sync calendar")}
@@ -756,12 +808,12 @@ export function AdminPanel({
                 {syncLoading === "Sync calendar" ? "Refreshing…" : "Refresh calendar & race entries"}
               </button>
               <button
-                onClick={() => manualAction("/api/admin/recompute", "Recompute")}
+                onClick={() => manualAction("/api/admin/recompute", "Recompute all")}
                 disabled={syncLoading !== null}
                 className={btnClass}
                 style={{ background: "#FFF7ED", color: "#9A3412", border: "1px solid #FED7AA" }}
               >
-                {syncLoading === "Recompute" ? "Rebuilding…" : "Rebuild all historical scores"}
+                {syncLoading === "Recompute all" ? "Rebuilding…" : "Rebuild all historical scores"}
               </button>
               <button
                 onClick={fixDriverNames}

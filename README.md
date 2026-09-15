@@ -145,9 +145,10 @@ A GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 
 ## Cron setup (free tier)
 Configured in `.github/workflows/season-cron.yml`:
-- `/api/cron/sync-results` every 30 minutes
+- `/api/cron/sync-results` and `/api/cron/send-reminders` on the frequent schedule (about every 5 minutes; GitHub Actions timing is best effort)
 - `/api/cron/sync-calendar` every 6 hours
-- `/api/cron/recompute` hourly
+
+Targeted score repair is available through `.github/workflows/score-repair.yml` and from the Admin screen. Full-season recomputation is not scheduled.
 
 All cron routes require `Authorization: Bearer <CRON_SECRET>` (or `x-cron-secret`) and will reject unauthenticated requests.
 
@@ -155,8 +156,10 @@ All cron routes require `Authorization: Bearer <CRON_SECRET>` (or `x-cron-secret
 - Put authorized emails in `ADMIN_ALLOWLIST`.
 - Admin UI: `/admin`
 - Actions:
-  - Refresh race results
-  - Recompute all scores
+  - Monitor complete pick submissions and manage players
+  - Check immediately for official race results
+  - Send manual reminders or recover missing picks
+  - Repair one race, with full-season rebuild available only under advanced maintenance
 
 ## Security notes
 - Deadline lock is enforced server-side in `app/api/picks/route.ts`.

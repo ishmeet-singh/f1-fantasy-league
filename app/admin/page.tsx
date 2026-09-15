@@ -23,8 +23,7 @@ export default async function AdminPage() {
       supabase.from("users").select("id,email,display_name,created_at").order("created_at", { ascending: true }),
       supabase.from("race_weekends").select("id,grand_prix,race_start,has_sprint,sprint_start")
         .gte("race_start", new Date().toISOString())
-        .order("race_start", { ascending: true })
-        .limit(5),
+        .order("race_start", { ascending: true }),
       supabase.from("race_weekends").select("id,grand_prix,race_start,has_sprint,sprint_start").order("race_start", {
         ascending: true
       }),
