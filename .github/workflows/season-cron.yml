@@ -2,9 +2,11 @@ name: season-cron
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # every 15 min — reminders
-    - cron: "*/5 * * * *"    # every 5 min — sync results
-    - cron: "15 */6 * * *"   # every 6 hours — sync calendar
+    # One off-peak frequent schedule runs both time-sensitive jobs. GitHub can
+    # delay scheduled workflows; separate overlapping expressions previously
+    # caused delayed reminder runs to skip result sync entirely.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
+    - cron: "17 */6 * * *"   # every 6 hours — sync calendar
   workflow_dispatch:
 
 jobs:
@@ -20,8 +22,8 @@ jobs:
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-      - name: Send reminder emails (every 15 minutes)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *' }}
+      - name: Send reminder emails (every 5 minutes)
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '2,7,12,17,22,27,32,37,42,47,52,57 * * * *' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \
@@ -31,7 +33,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
       - name: Call sync-results (every 5 minutes)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '2,7,12,17,22,27,32,37,42,47,52,57 * * * *' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \
@@ -41,7 +43,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
       - name: Call sync-calendar (every 6 hours)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '15 */6 * * *' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '17 */6 * * *' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \
