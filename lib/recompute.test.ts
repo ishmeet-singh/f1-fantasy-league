@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildRecomputeRows,
   buildWeekendRowsForRace,
-  hasCompleteResults,
-  hasScoreableResults
+  hasCompleteResults
 } from "./recompute";
 import { eligibleDriverIdsForRace } from "./race-driver-eligibility";
 import { scoreEvent } from "./scoring";
@@ -34,7 +33,8 @@ describe("buildRecomputeRows", () => {
       [{ id: "1291", has_sprint: false, sprint_start: null }],
       users,
       predictions,
-      results
+      results,
+      [{ race_id: "1291", event_type: "race", status: "official" }]
     );
 
     expect(built.scoreRows).toHaveLength(106);
@@ -58,33 +58,31 @@ describe("hasCompleteResults", () => {
   });
 });
 
-describe("hasScoreableResults", () => {
-  it("accepts a finalized qualifying classification with non-participants absent", () => {
+describe("official result session gate", () => {
+  it("scores a published qualifying classification without inferring grid size", () => {
     const results = Array.from({ length: 20 }, (_, index) => ({
+      race_id: "1294",
+      event_type: "quali",
       driver_id: String(index + 1),
       actual_position: index + 1
     }));
-
-    expect(hasScoreableResults("1294", "quali", results)).toBe(true);
-  });
-
-  it("rejects qualifying results before the podium classification is complete", () => {
-    const results = [
-      { driver_id: "1", actual_position: 1 },
-      { driver_id: "12", actual_position: 2 }
-    ];
-
-    expect(hasScoreableResults("1294", "quali", results)).toBe(false);
-  });
-
-  it("continues to require the complete eligible grid for race results", () => {
-    const results = [...eligibleDriverIdsForRace("1294")].map((driver_id, index) => ({
-      driver_id,
-      actual_position: index + 1
+    const predictions = results.slice(0, 10).map((result, index) => ({
+      user_id: "user-1",
+      race_id: result.race_id,
+      event_type: result.event_type,
+      driver_id: result.driver_id,
+      predicted_position: index + 1
     }));
 
-    expect(hasScoreableResults("1294", "race", results)).toBe(true);
-    expect(hasScoreableResults("1294", "race", results.slice(0, -1))).toBe(false);
+    const races = [{ id: "1294", has_sprint: false, sprint_start: null }];
+    const users = [{ id: "user-1" }];
+
+    expect(buildRecomputeRows(races, users, predictions, results, []).scoreRows).toHaveLength(0);
+    expect(
+      buildRecomputeRows(races, users, predictions, results, [
+        { race_id: "1294", event_type: "quali", status: "official" }
+      ]).scoreRows
+    ).toHaveLength(1);
   });
 });
 

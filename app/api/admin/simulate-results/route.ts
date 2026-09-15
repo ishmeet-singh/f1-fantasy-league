@@ -1,6 +1,8 @@
 import { requireAdminApi } from "@/lib/admin";
+import { PICKS_REQUIRED } from "@/lib/pick-rules";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { recomputeAllScores } from "@/lib/recompute";
+import { markResultSessionOfficial } from "@/lib/result-sessions";
 import { NextResponse } from "next/server";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -33,15 +35,12 @@ export async function POST(req: Request) {
 
   const driverIds = drivers.map((d) => d.id);
 
-  // 2026 season has 22 drivers — cap matches DB constraint
-  const MAX_POSITIONS = 22;
-  const capped = driverIds.slice(0, MAX_POSITIONS);
-
   async function insertResults(eventType: "quali" | "sprint" | "race", topN: number) {
-    const shuffled = shuffle(capped);
+    const shuffled = shuffle(driverIds);
+    const selected = shuffled.slice(0, topN);
     await supabase.from("results").delete().eq("race_id", raceId).eq("event_type", eventType);
     const { error } = await supabase.from("results").insert(
-      shuffled.slice(0, topN).map((driverId, idx) => ({
+      selected.map((driverId, idx) => ({
         race_id: raceId,
         event_type: eventType,
         driver_id: driverId,
@@ -49,17 +48,23 @@ export async function POST(req: Request) {
       }))
     );
     if (error) throw new Error(`Insert ${eventType} results: ${error.message}`);
+    await markResultSessionOfficial({
+      raceId,
+      eventType,
+      source: "manual",
+      resultCount: selected.length
+    });
   }
 
   try {
-    await insertResults("quali", 3);
-    if (race.has_sprint) await insertResults("sprint", 10);
-    await insertResults("race", Math.min(capped.length, MAX_POSITIONS));
+    await insertResults("quali", PICKS_REQUIRED.quali);
+    if (race.has_sprint) await insertResults("sprint", PICKS_REQUIRED.sprint);
+    await insertResults("race", driverIds.length);
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 
   await recomputeAllScores();
 
-  return NextResponse.json({ ok: true, raceId, driversUsed: capped.length });
+  return NextResponse.json({ ok: true, raceId, driversUsed: driverIds.length });
 }

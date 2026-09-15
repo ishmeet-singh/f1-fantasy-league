@@ -81,15 +81,16 @@ export const getCachedUsers = unstable_cache(fetchUsersUncached, ["users-v1"], {
 
 async function fetchRaceCompletionsUncached(): Promise<string[]> {
   const { data } = await getSupabaseAdmin()
-    .from("results")
+    .from("result_sessions")
     .select("race_id")
-    .eq("event_type", "race");
+    .eq("event_type", "race")
+    .eq("status", "official");
   return (data ?? []).map((r) => r.race_id);
 }
 
-/** Race IDs with a published main-race result — 60s cache, shared with dashboard. */
+/** Race IDs with an official main-race classification. */
 export const getCachedRaceCompletions = unstable_cache(
   fetchRaceCompletionsUncached,
-  ["race-completions-v1"],
-  { revalidate: 60 }
+  ["race-completions-v2"],
+  { revalidate: 60, tags: ["race-completions"] }
 );

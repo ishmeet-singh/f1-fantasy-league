@@ -108,6 +108,7 @@ export function ResultsTabs({
 
   const weekendTotal = (["quali", "sprint", "race"] as TabId[]).reduce((s, et) => s + (scoresByEvent[et]?.points ?? 0), 0);
   const weekendExact = (["quali", "sprint", "race"] as TabId[]).reduce((s, et) => s + (scoresByEvent[et]?.exact ?? 0), 0);
+  const hasAnyScore = Object.values(scoresByEvent).some((score) => score !== null);
 
   return (
     <div className="space-y-4">
@@ -142,7 +143,7 @@ export function ResultsTabs({
             <LocalTime iso={selectedRaceDate} opts={{ day: "numeric", month: "short", year: "numeric" }} />
           </p>
         </div>
-        {hasUser && weekendTotal > 0 && (
+        {hasUser && hasAnyScore && (
           <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-3 text-center">
             <p className="text-3xl font-bold text-red-400">{weekendTotal}</p>
             <p className="text-xs text-slate-400 mt-0.5">points this weekend</p>
@@ -164,7 +165,7 @@ export function ResultsTabs({
               }`}
             >
               {TAB_LABELS[tab]}
-              {s && s.points > 0 && (
+              {s && (
                 <span className="ml-1.5 text-xs text-emerald-400">{s.points}pt</span>
               )}
             </button>
@@ -173,7 +174,7 @@ export function ResultsTabs({
       </div>
 
       {/* Score summary for this event */}
-      {hasUser && myScore && myScore.points > 0 && (
+      {hasUser && myScore && (
         <div className="flex items-center gap-3 flex-wrap text-sm">
           <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-1.5">
             <span className="text-white font-bold">{myScore.points}</span>

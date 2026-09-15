@@ -14,8 +14,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const raceId = searchParams.get("raceId");
+    const forceAvailableResults = searchParams.get("force") === "true";
     const result = raceId
-      ? await recomputeRaceScores(raceId, { acceptAvailableResults: true })
+      ? await recomputeRaceScores(raceId, { forceAvailableResults })
       : await recomputeAllScores();
     if (result.errors.length) {
       await endCronRun(runId, "error", { error: result.errors.join("; "), summary: { ...result } });
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
     }
     await endCronRun(runId, "ok", { summary: { ...result } });
     revalidateTag("weekend-scores");
+    revalidateTag("race-completions");
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("recompute cron error:", err);

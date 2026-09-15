@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { hasCompleteResults, hasScoreableResults } from "@/lib/recompute";
+import { hasCompleteResults } from "@/lib/recompute";
 import {
   fetchJolpiRaces,
   fetchJolpiDriverStandings,
@@ -13,6 +13,11 @@ import {
 import { applyOfficialSprintWeekend2026 } from "@/lib/sprint-weekends-2026";
 import { sessionsReadyToSync } from "@/lib/sync-session-gate";
 import { mapJolpiResultsToOpenF1 } from "@/lib/driver-crossref";
+import {
+  markResultSessionOfficial,
+  recentlySyncedEventTypes,
+  type ResultSessionRow
+} from "@/lib/result-sessions";
 import type { SyncedSession } from "@/lib/sync";
 
 function isoDateTime(date: string, time: string) {
@@ -94,11 +99,13 @@ export async function syncResultsJolpi(): Promise<SyncedSession[]> {
   const windowStart = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
   const windowEnd   = new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Find ALL races in the sync window — both Jolpi-ID and OpenF1-ID races.
-  // OpenF1-ID races (e.g. id="1280") fall back to Jolpi when OpenF1 is rate-limited.
+  // OpenF1-ID races already use Jolpi inside syncResultsOpenF1 when OpenF1 is
+  // unavailable. This path is only for legacy Jolpi-ID calendars, avoiding
+  // concurrent last-write-wins updates from two sync workers.
   const { data: races, error: racesError } = await supabase
     .from("race_weekends")
     .select("id,has_sprint,race_start,quali_start,sprint_start")
+    .like("id", "jolpi-%")
     .gte("race_start", windowStart)
     .lte("race_start", windowEnd);
   if (racesError) throw new Error(`Jolpi race window query failed: ${racesError.message}`);
@@ -147,28 +154,22 @@ export async function syncResultsJolpi(): Promise<SyncedSession[]> {
 
       const isOpenF1Race = !String(race.id).startsWith("jolpi-");
 
-      const { data: existingResults, error: existingResultsError } = await supabase
-        .from("results")
-        .select("event_type,driver_id")
+      const { data: resultSessions, error: resultSessionsError } = await supabase
+        .from("result_sessions")
+        .select("race_id,event_type,status,source,result_count,last_synced_at,score_updated_at")
         .eq("race_id", race.id);
-      if (existingResultsError) {
-        throw new Error(`[jolpi/${race.id}] existing results: ${existingResultsError.message}`);
+      if (resultSessionsError) {
+        throw new Error(`[jolpi/${race.id}] result sessions: ${resultSessionsError.message}`);
       }
-      const resultDriversByEvent = new Map<string, { driver_id: string }[]>();
-      for (const result of existingResults ?? []) {
-        if (!resultDriversByEvent.has(result.event_type)) resultDriversByEvent.set(result.event_type, []);
-        resultDriversByEvent.get(result.event_type)!.push({ driver_id: result.driver_id });
-      }
-      const alreadySynced = new Set(
-        [...resultDriversByEvent.entries()]
-          .filter(([, rows]) => hasCompleteResults(String(race.id), rows))
-          .map(([eventType]) => eventType)
-      );
-      for (const eventType of alreadySynced) {
-        syncedSessions.push({ raceId: String(race.id), eventType: eventType as SyncedSession["eventType"] });
+      const officialSessions = (resultSessions ?? []) as ResultSessionRow[];
+      const recentlySynced = recentlySyncedEventTypes(officialSessions, now);
+      for (const session of officialSessions) {
+        if (session.status === "official" && !session.score_updated_at) {
+          syncedSessions.push({ raceId: String(race.id), eventType: session.event_type });
+        }
       }
 
-      const eventsToSync = sessionsReadyToSync(race, now, alreadySynced);
+      const eventsToSync = sessionsReadyToSync(race, now, recentlySynced);
       if (!eventsToSync.length) continue;
 
       for (const { eventType } of eventsToSync) {
@@ -204,6 +205,12 @@ export async function syncResultsJolpi(): Promise<SyncedSession[]> {
         } else {
           console.log(`[jolpi/${race.id}/${eventType}] saved ${resultRows.length} results`);
         }
+        await markResultSessionOfficial({
+          raceId: String(race.id),
+          eventType,
+          source: "jolpi",
+          resultCount: resultRows.length
+        });
 
         const { data: savedResults, error: savedResultsError } = await supabase
           .from("results")
@@ -213,11 +220,11 @@ export async function syncResultsJolpi(): Promise<SyncedSession[]> {
         if (savedResultsError) {
           throw new Error(`[jolpi/${race.id}/${eventType}] verify results: ${savedResultsError.message}`);
         }
-        if (hasScoreableResults(String(race.id), eventType, savedResults ?? [])) {
-          syncedSessions.push({ raceId: String(race.id), eventType });
-        }
+        syncedSessions.push({ raceId: String(race.id), eventType });
         if (!hasCompleteResults(String(race.id), savedResults ?? [])) {
-          console.log(`[jolpi/${race.id}/${eventType}] Results still partial — will retry`);
+          console.log(
+            `[jolpi/${race.id}/${eventType}] Official classification differs from configured grid (${savedResults?.length ?? 0} rows)`
+          );
         }
 
         if (!isOpenF1Race) {

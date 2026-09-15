@@ -115,11 +115,23 @@ async function fetchBulkResults(year: number, endpoint: string, resultKey: keyof
     const data = await fetchJson<JolpiBulkResponse>(`/f1/${year}/${endpoint}?limit=500`);
     for (const race of data.MRData.RaceTable.Races) {
       const rows = (race[resultKey] as JolpiResultRow[] | undefined) ?? [];
-      map.set(race.round, rows.map((r) => ({
-        driverId: r.Driver.driverId,
-        position: Number(r.position) || 20,
-        team: r.Constructor.name
-      })));
+      map.set(
+        race.round,
+        rows.flatMap((r) => {
+          const position = Number(r.position);
+          if (!Number.isInteger(position) || position < 1) {
+            console.warn(
+              `[Jolpi/${year}/${race.round}/${endpoint}] Ignoring invalid position for ${r.Driver.driverId}`
+            );
+            return [];
+          }
+          return [{
+            driverId: r.Driver.driverId,
+            position,
+            team: r.Constructor.name
+          }];
+        })
+      );
     }
   } catch (err) {
     console.error(`fetchBulkResults(${endpoint}) failed:`, err);
@@ -148,11 +160,15 @@ const JOLPI_ROUND_ENDPOINT: Record<JolpiEventKind, { path: string; resultKey: ke
 };
 
 function mapJolpiResultRows(rows: JolpiResultRow[]) {
-  return rows.map((r) => ({
-    driverId: r.Driver.driverId,
-    position: Number(r.position) || 20,
-    team: r.Constructor.name,
-  }));
+  return rows.flatMap((r) => {
+    const position = Number(r.position);
+    if (!Number.isInteger(position) || position < 1) return [];
+    return [{
+      driverId: r.Driver.driverId,
+      position,
+      team: r.Constructor.name,
+    }];
+  });
 }
 
 /** Per-round fetch — Jolpi bulk endpoints often lag behind the latest race. */

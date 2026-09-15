@@ -24,7 +24,7 @@ const WINDOW_HOURS = 48;
 function picksOpenAt(r: RaceWeekendRow, now: Date): boolean {
   const first = Math.min(
     new Date(r.quali_start).getTime(),
-    r.has_sprint && r.sprint_start ? new Date(r.sprint_start).getTime() : Infinity
+    r.sprint_start ? new Date(r.sprint_start).getTime() : Infinity
   );
   const openAt = new Date(first - WINDOW_HOURS * 60 * 60 * 1000);
   return now >= openAt;
@@ -55,7 +55,7 @@ export async function loadPicksPage(
 
   const race = selectPicksRace(races, selectedRaceId);
 
-  const [picksRes, resultsRes] = await Promise.all([
+  const [picksRes, resultsRes, raceEntriesRes] = await Promise.all([
     supabase
       .from("predictions")
       .select("user_id,driver_id,predicted_position,event_type,drivers(name)")
@@ -63,6 +63,10 @@ export async function loadPicksPage(
     supabase
       .from("results")
       .select("event_type,driver_id,actual_position")
+      .eq("race_id", race.id),
+    supabase
+      .from("race_entries")
+      .select("driver_id,driver_name,team")
       .eq("race_id", race.id)
   ]);
 
@@ -74,10 +78,17 @@ export async function loadPicksPage(
       predicted_position: p.predicted_position,
       event_type: p.event_type
     }));
+  const raceEntries = raceEntriesRes.data ?? [];
 
   return {
     races,
-    drivers: eligibleDriversForRace(race.id, drivers),
+    drivers: raceEntries.length
+      ? raceEntries.map((entry) => ({
+          id: entry.driver_id,
+          name: entry.driver_name,
+          team: entry.team
+        }))
+      : eligibleDriversForRace(race.id, drivers),
     race,
     pickRows,
     existingResults: resultsRes.data ?? [],

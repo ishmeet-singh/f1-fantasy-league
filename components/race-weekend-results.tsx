@@ -121,7 +121,7 @@ function SessionCard({
           <p className="font-bold text-sm" style={{ color: F1.carbon }}>
             {label}
           </p>
-          {myScore && myScore.points > 0 && (
+          {myScore && (
             <p className="mt-0.5 text-xs font-medium" style={{ color: EXACT_TEXT }}>
               {myScore.points} pts · {myScore.exact} exact
             </p>
@@ -541,7 +541,7 @@ export function RaceWeekendResults({
   });
 
   const sessionsScored = (["quali", "sprint", "race"] as TabId[]).filter(
-    (et) => (myScores[et]?.points ?? 0) > 0
+    (et) => myScores[et] !== null
   ).length;
 
   return (
@@ -571,7 +571,7 @@ export function RaceWeekendResults({
               </p>
             )}
           </div>
-          {weekendTotal > 0 ? (
+          {sessionsScored > 0 ? (
             <div className="sm:text-right">
               <p className="text-xs font-bold uppercase tracking-wide text-white/60">Your score</p>
               <p className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: F1.red }}>

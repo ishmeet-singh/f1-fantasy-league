@@ -29,7 +29,6 @@ export function sessionsReadyToSync(
   }
 
   if (
-    race.has_sprint &&
     race.sprint_start &&
     new Date(race.sprint_start).getTime() <= nowMs &&
     !alreadySynced.has("sprint")

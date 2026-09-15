@@ -1,12 +1,12 @@
 import { fetchAllPages } from "@/lib/paginated-query";
 import { eligibleDriverIdsForRace } from "@/lib/race-driver-eligibility";
 import { isSprintWeekend } from "@/lib/race-weekend";
-import { scoreEvent } from "@/lib/scoring";
+import { markRaceSessionsScored } from "@/lib/result-sessions";
+import { LEGACY_FALLBACK_POSITION, scoreEvent } from "@/lib/scoring";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { EventType } from "@/lib/types";
 
 const events: EventType[] = ["quali", "sprint", "race"];
-const WRITE_BATCH_SIZE = 500;
 
 type RaceRow = {
   id: string;
@@ -26,6 +26,11 @@ type ResultRow = {
   event_type: string;
   driver_id: string;
   actual_position: number;
+};
+type ResultSessionStateRow = {
+  race_id: string;
+  event_type: string;
+  status: string;
 };
 type ScoreRow = {
   user_id: string;
@@ -55,6 +60,8 @@ export type RecomputeResult = {
 export type ScopedRecomputeResult = {
   raceId: string;
   completeEvents: EventType[];
+  fetchedPredictions: number;
+  fetchedResults: number;
   scoreRows: number;
   weekendRows: number;
   errors: string[];
@@ -72,26 +79,12 @@ export function hasCompleteResults(
   return [...expected].every((driverId) => actual.has(driverId));
 }
 
-export function hasScoreableResults(
-  raceId: string,
-  eventType: EventType,
-  results: ReadonlyArray<{ driver_id: string; actual_position?: number }>
-): boolean {
-  if (eventType !== "quali") return hasCompleteResults(raceId, results);
-
-  const positions = new Set(
-    results
-      .map((row) => row.actual_position)
-      .filter((position): position is number => typeof position === "number")
-  );
-  return [1, 2, 3].every((position) => positions.has(position));
-}
-
 export function buildRecomputeRows(
   races: RaceRow[],
   users: UserRow[],
   allPreds: PredictionRow[],
-  allResults: ResultRow[]
+  allResults: ResultRow[],
+  resultSessions: ResultSessionStateRow[]
 ): { scoreRows: ScoreRow[]; weekendRows: WeekendRow[]; sprintWeekendCount: number } {
   type Pred = { driver_id: string; predicted_position: number };
   type Res = { driver_id: string; actual_position: number };
@@ -122,6 +115,11 @@ export function buildRecomputeRows(
 
   const scoreRows: ScoreRow[] = [];
   const weekendRows: WeekendRow[] = [];
+  const officialSessions = new Set(
+    resultSessions
+      .filter((session) => session.status === "official")
+      .map((session) => `${session.race_id}:${session.event_type}`)
+  );
 
   for (const race of races) {
     const sprintWeekend = isSprintWeekend(race);
@@ -136,7 +134,7 @@ export function buildRecomputeRows(
 
         const predictions = predIndex.get(race.id)?.get(eventType)?.get(user.id) ?? [];
         const results = resultIndex.get(race.id)?.get(eventType) ?? [];
-        if (!predictions.length || !hasScoreableResults(race.id, eventType, results)) continue;
+        if (!predictions.length || !officialSessions.has(`${race.id}:${eventType}`)) continue;
 
         const score = scoreEvent(eventType, predictions, results, sprintWeekend);
         weekendPoints += score.points;
@@ -169,21 +167,29 @@ export function buildRecomputeRows(
   };
 }
 
-async function upsertInBatches(
-  table: "scores" | "weekend_scores",
-  rows: ScoreRow[] | WeekendRow[],
-  onConflict: string
-): Promise<string[]> {
+async function persistRaceScores(
+  raceId: string,
+  scoreRows: ScoreRow[]
+): Promise<{ scoreRows: number; weekendRows: number; errors: string[] }> {
   const supabase = getSupabaseAdmin();
-  const errors: string[] = [];
-
-  for (let from = 0; from < rows.length; from += WRITE_BATCH_SIZE) {
-    const batch = rows.slice(from, from + WRITE_BATCH_SIZE);
-    const { error } = await supabase.from(table).upsert(batch, { onConflict });
-    if (error) errors.push(`${table} upsert batch ${from / WRITE_BATCH_SIZE + 1}: ${error.message}`);
+  const { data, error } = await supabase.rpc("persist_race_scores", {
+    p_race_id: raceId,
+    p_scores: scoreRows
+  });
+  if (error) {
+    return {
+      scoreRows: 0,
+      weekendRows: 0,
+      errors: [`race ${raceId} score transaction: ${error.message}`]
+    };
   }
 
-  return errors;
+  const summary = Array.isArray(data) ? data[0] : data;
+  return {
+    scoreRows: Number(summary?.score_rows ?? 0),
+    weekendRows: Number(summary?.weekend_rows ?? 0),
+    errors: []
+  };
 }
 
 export function buildWeekendRowsForRace(
@@ -212,33 +218,9 @@ export function buildWeekendRowsForRace(
   });
 }
 
-async function rebuildWeekendScoresForRace(raceId: string): Promise<{ rows: number; errors: string[] }> {
-  const supabase = getSupabaseAdmin();
-  const [users, scores] = await Promise.all([
-    fetchAllPages<UserRow>("users", (from, to) =>
-      supabase.from("users").select("id").order("id").range(from, to)
-    ),
-    fetchAllPages<ScoreRow>(`scores for race ${raceId}`, (from, to) =>
-      supabase
-        .from("scores")
-        .select("user_id,race_id,event_type,points,total_error,exact_matches")
-        .eq("race_id", raceId)
-        .order("id")
-        .range(from, to)
-    )
-  ]);
-
-  const rows = buildWeekendRowsForRace(raceId, users, scores);
-
-  return {
-    rows: rows.length,
-    errors: await upsertInBatches("weekend_scores", rows, "user_id,race_id")
-  };
-}
-
 export async function recomputeRaceScores(
   raceId: string,
-  options: { acceptAvailableResults?: boolean } = {}
+  options: { forceAvailableResults?: boolean } = {}
 ): Promise<ScopedRecomputeResult> {
   const supabase = getSupabaseAdmin();
   const { data: race, error: raceError } = await supabase
@@ -248,7 +230,7 @@ export async function recomputeRaceScores(
     .single();
   if (raceError || !race) throw new Error(`race ${raceId}: ${raceError?.message ?? "not found"}`);
 
-  const [predictions, results, users, existingScores] = await Promise.all([
+  const [predictions, results, resultSessions, raceEntries] = await Promise.all([
     fetchAllPages<PredictionRow>(`predictions for race ${raceId}`, (from, to) =>
       supabase
         .from("predictions")
@@ -265,15 +247,20 @@ export async function recomputeRaceScores(
         .order("id")
         .range(from, to)
     ),
-    fetchAllPages<UserRow>("users", (from, to) =>
-      supabase.from("users").select("id").order("id").range(from, to)
-    ),
-    fetchAllPages<ScoreRow>(`existing scores for race ${raceId}`, (from, to) =>
+    fetchAllPages<ResultSessionStateRow>(`result sessions for race ${raceId}`, (from, to) =>
       supabase
-        .from("scores")
-        .select("user_id,race_id,event_type,points,total_error,exact_matches")
+        .from("result_sessions")
+        .select("race_id,event_type,status")
         .eq("race_id", raceId)
-        .order("id")
+        .order("event_type")
+        .range(from, to)
+    ),
+    fetchAllPages<{ driver_id: string }>(`entries for race ${raceId}`, (from, to) =>
+      supabase
+        .from("race_entries")
+        .select("driver_id")
+        .eq("race_id", raceId)
+        .order("driver_id")
         .range(from, to)
     )
   ]);
@@ -295,19 +282,50 @@ export async function recomputeRaceScores(
   }
 
   const sprintWeekend = isSprintWeekend(race);
+  const officialEvents = new Set(
+    resultSessions
+      .filter((session) => session.status === "official")
+      .map((session) => session.event_type)
+  );
   const completeEvents = events.filter((eventType) => {
     if (eventType === "sprint" && !sprintWeekend) return false;
     const eventResults = resultsByEvent.get(eventType) ?? [];
-    return options.acceptAvailableResults
+    return options.forceAvailableResults
       ? eventResults.length > 0
-      : hasScoreableResults(raceId, eventType, eventResults);
+      : officialEvents.has(eventType) && eventResults.length > 0;
   });
+  const missingOfficialResults = [...officialEvents].filter(
+    (eventType) => (resultsByEvent.get(eventType) ?? []).length === 0
+  );
+  if (missingOfficialResults.length) {
+    return {
+      raceId,
+      completeEvents,
+      fetchedPredictions: predictions.length,
+      fetchedResults: results.length,
+      scoreRows: 0,
+      weekendRows: 0,
+      errors: [
+        `race ${raceId}: official session metadata has no results for ${missingOfficialResults.join(", ")}`
+      ]
+    };
+  }
 
   const scoreRows: ScoreRow[] = [];
+  const fallbackPosition = Math.max(
+    raceEntries.length || LEGACY_FALLBACK_POSITION,
+    ...results.map((result) => result.actual_position)
+  );
   for (const eventType of completeEvents) {
     const eventResults = resultsByEvent.get(eventType) ?? [];
     for (const [userId, userPredictions] of predictionsByEventAndUser.get(eventType) ?? []) {
-      const score = scoreEvent(eventType, userPredictions, eventResults, sprintWeekend);
+      const score = scoreEvent(
+        eventType,
+        userPredictions,
+        eventResults,
+        sprintWeekend,
+        fallbackPosition
+      );
       scoreRows.push({
         user_id: userId,
         race_id: raceId,
@@ -319,85 +337,71 @@ export async function recomputeRaceScores(
     }
   }
 
-  const errors = await upsertInBatches("scores", scoreRows, "user_id,race_id,event_type");
-  if (errors.length) {
-    return { raceId, completeEvents, scoreRows: scoreRows.length, weekendRows: 0, errors };
+  const persisted = await persistRaceScores(raceId, scoreRows);
+  if (!persisted.errors.length && persisted.scoreRows !== scoreRows.length) {
+    persisted.errors.push(
+      `race ${raceId}: expected ${scoreRows.length} score rows, persisted ${persisted.scoreRows}`
+    );
   }
-
-  const mergedScores = new Map(
-    existingScores.map((score) => [`${score.user_id}:${score.event_type}`, score])
-  );
-  for (const score of scoreRows) {
-    mergedScores.set(`${score.user_id}:${score.event_type}`, score);
+  if (!persisted.errors.length) {
+    try {
+      await markRaceSessionsScored(raceId);
+    } catch (error) {
+      persisted.errors.push(String(error));
+    }
   }
-  const weekendRows = buildWeekendRowsForRace(raceId, users, [...mergedScores.values()]);
-  const weekendErrors = await upsertInBatches(
-    "weekend_scores",
-    weekendRows,
-    "user_id,race_id"
-  );
   return {
     raceId,
     completeEvents,
-    scoreRows: scoreRows.length,
-    weekendRows: weekendRows.length,
-    errors: weekendErrors
+    fetchedPredictions: predictions.length,
+    fetchedResults: results.length,
+    scoreRows: persisted.scoreRows,
+    weekendRows: persisted.weekendRows,
+    errors: persisted.errors
   };
 }
 
 export async function recomputeAllScores(): Promise<RecomputeResult> {
   const supabase = getSupabaseAdmin();
-  const [races, users, allPreds, allResults] = await Promise.all([
-    fetchAllPages<RaceRow>("race_weekends", (from, to) =>
-      supabase.from("race_weekends").select("id,has_sprint,sprint_start").order("id").range(from, to)
-    ),
-    fetchAllPages<UserRow>("users", (from, to) =>
-      supabase.from("users").select("id").order("id").range(from, to)
-    ),
-    fetchAllPages<PredictionRow>("predictions", (from, to) =>
-      supabase
-        .from("predictions")
-        .select("user_id,race_id,event_type,driver_id,predicted_position")
-        .order("id")
-        .range(from, to)
-    ),
-    fetchAllPages<ResultRow>("results", (from, to) =>
-      supabase
-        .from("results")
-        .select("race_id,event_type,driver_id,actual_position")
-        .order("id")
-        .range(from, to)
-    )
-  ]);
+  const races = await fetchAllPages<RaceRow>("race_weekends", (from, to) =>
+    supabase
+      .from("race_weekends")
+      .select("id,has_sprint,sprint_start")
+      .order("id")
+      .range(from, to)
+  );
 
-  if (!races.length || !users.length) {
+  if (!races.length) {
     return {
       scoreRows: 0,
       weekendRows: 0,
       sprintWeekendCount: 0,
-      fetchedPredictions: allPreds.length,
-      fetchedResults: allResults.length,
-      errors: ["No races or users in database"]
+      fetchedPredictions: 0,
+      fetchedResults: 0,
+      errors: ["No races in database"]
     };
   }
 
-  const built = buildRecomputeRows(races, users, allPreds, allResults);
-  const errors = await upsertInBatches("scores", built.scoreRows, "user_id,race_id,event_type");
+  const errors: string[] = [];
+  let scoreRows = 0;
   let weekendRows = 0;
-  if (!errors.length) {
-    for (const race of races) {
-      const rebuilt = await rebuildWeekendScoresForRace(race.id);
-      weekendRows += rebuilt.rows;
-      errors.push(...rebuilt.errors);
-    }
+  let fetchedPredictions = 0;
+  let fetchedResults = 0;
+  for (const race of races) {
+    const result = await recomputeRaceScores(race.id);
+    scoreRows += result.scoreRows;
+    weekendRows += result.weekendRows;
+    fetchedPredictions += result.fetchedPredictions;
+    fetchedResults += result.fetchedResults;
+    errors.push(...result.errors);
   }
 
   return {
-    scoreRows: built.scoreRows.length,
+    scoreRows,
     weekendRows,
-    sprintWeekendCount: built.sprintWeekendCount,
-    fetchedPredictions: allPreds.length,
-    fetchedResults: allResults.length,
+    sprintWeekendCount: races.filter(isSprintWeekend).length,
+    fetchedPredictions,
+    fetchedResults,
     errors
   };
 }

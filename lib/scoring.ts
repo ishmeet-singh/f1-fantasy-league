@@ -1,4 +1,5 @@
 import { DriverPrediction, DriverResult, EventType } from "@/lib/types";
+import { BEST_WEEKENDS_COUNT } from "@/lib/season-standings";
 
 type Config = { max: number; penalty: number; podiumBonus: number; podiumSize: number };
 
@@ -35,13 +36,14 @@ export type EventScoreResult = {
   podiumExact: boolean;
 };
 
-const fallbackPos = 22; // 2026 season has 22 drivers
+export const LEGACY_FALLBACK_POSITION = 22;
 
 export function scoreEvent(
   eventType: EventType,
   predictions: DriverPrediction[],
   results: DriverResult[],
-  hasSprint = false
+  hasSprint = false,
+  fallbackPosition = LEGACY_FALLBACK_POSITION
 ): EventScoreResult {
   const cfg = getEventConfig(eventType, hasSprint);
   const resultMap = new Map(results.map((r) => [r.driver_id, r.actual_position]));
@@ -51,7 +53,7 @@ export function scoreEvent(
   let exactMatches = 0;
 
   for (const p of predictions) {
-    const actual = resultMap.get(p.driver_id) ?? fallbackPos;
+    const actual = resultMap.get(p.driver_id) ?? fallbackPosition;
     const diff = Math.abs(p.predicted_position - actual);
     totalError += diff;
     if (diff === 0) exactMatches += 1;
@@ -68,9 +70,6 @@ export function scoreEvent(
 
   return { points, totalError, exactMatches, podiumExact };
 }
-
-/** @deprecated Use BEST_WEEKENDS_COUNT from @/lib/season-standings */
-export const BEST_WEEKENDS_COUNT = 18;
 
 /** Rows for rules UI: points per pick at each error distance. */
 export function pickScoreRows(max: number, penalty: number): { label: string; points: number }[] {

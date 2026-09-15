@@ -91,8 +91,14 @@ export async function fetchSessionResults(meetingKey: number, eventType: EventTy
   if (!sessions[0]?.session_key) return [];
 
   const classifications = await fetchJson<OpenF1Classification[]>(`/v1/session_result?session_key=${sessions[0].session_key}`);
-  return classifications.map((row) => ({
-    driver_number: String(row.driver_number),
-    position: Number(row.position) || 20
-  }));
+  return classifications.flatMap((row) => {
+    const position = Number(row.position);
+    if (!Number.isInteger(position) || position < 1) {
+      console.warn(
+        `[OpenF1/${sessions[0].session_key}] Ignoring invalid classification position for driver ${row.driver_number}`
+      );
+      return [];
+    }
+    return [{ driver_number: String(row.driver_number), position }];
+  });
 }

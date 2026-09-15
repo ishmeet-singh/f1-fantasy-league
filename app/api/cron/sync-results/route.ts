@@ -14,7 +14,8 @@ export async function GET(request: Request) {
   try {
     const summary = await syncResults();
     await endCronRun(runId, "ok", { summary });
-    if (summary.scoreRows > 0) revalidateTag("weekend-scores");
+    revalidateTag("weekend-scores");
+    revalidateTag("race-completions");
     return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
     console.error("sync-results cron error:", err);

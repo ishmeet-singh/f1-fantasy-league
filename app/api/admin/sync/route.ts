@@ -8,7 +8,13 @@ export const dynamic = "force-dynamic";
 export async function POST() {
   const auth = requireAdminApi();
   if (auth instanceof NextResponse) return auth;
-  const summary = await syncResults();
-  if (summary.scoreRows > 0) revalidateTag("weekend-scores");
-  return NextResponse.json({ ok: true, ...summary });
+  try {
+    const summary = await syncResults();
+    revalidateTag("weekend-scores");
+    revalidateTag("race-completions");
+    return NextResponse.json({ ok: true, ...summary });
+  } catch (error) {
+    console.error("admin sync error:", error);
+    return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
+  }
 }

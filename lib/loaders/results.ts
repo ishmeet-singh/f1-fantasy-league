@@ -1,7 +1,10 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { getCachedDrivers, getCachedRaceWeekends } from "@/lib/cached-reference-data";
+import {
+  getCachedDrivers,
+  getCachedRaceCompletions,
+  getCachedRaceWeekends
+} from "@/lib/cached-reference-data";
 import { resolveDriverDisplayName } from "@/lib/driver-crossref";
-import { distinctRaceIdsFromRaceResults } from "@/lib/races-with-results";
 
 type TabId = "quali" | "sprint" | "race";
 
@@ -40,14 +43,14 @@ export async function loadResultsPage(
 ): Promise<ResultsPageData | null> {
   const supabase = getSupabaseAdmin();
 
-  const [races, completedRes] = await Promise.all([
+  const [races, completedRaceIds] = await Promise.all([
     getCachedRaceWeekends(),
-    supabase.from("results").select("race_id").eq("event_type", "race")
+    getCachedRaceCompletions()
   ]);
 
   if (!races.length) return null;
 
-  const raceIdsWithResults = distinctRaceIdsFromRaceResults(completedRes.data ?? []);
+  const raceIdsWithResults = new Set(completedRaceIds);
   const selectedRace = selectResultsRace(races, raceIdsWithResults, selectedRaceId);
 
   const [resultRows, allPickRows, allUsers, allScoreRows, drivers] = await Promise.all([

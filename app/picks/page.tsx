@@ -8,6 +8,7 @@ import { RacePageSkeleton } from "@/components/race-page-skeleton";
 import { SESSION_OPTS } from "@/lib/date-formats";
 import { getRequestUser } from "@/lib/request-user";
 import { loadPicksPage, buildLeaguePicksForEvent } from "@/lib/loaders/picks";
+import { PICKS_REQUIRED } from "@/lib/pick-rules";
 import { syncCalendar } from "@/lib/sync";
 import { F1 } from "@/lib/f1-theme";
 import { redirect } from "next/navigation";
@@ -19,7 +20,7 @@ const WINDOW_HOURS = 48;
 function picksOpenAt(race: { quali_start: string; sprint_start?: string | null; has_sprint: boolean }): Date {
   const firstSessionTime = Math.min(
     new Date(race.quali_start).getTime(),
-    race.has_sprint && race.sprint_start ? new Date(race.sprint_start).getTime() : Infinity
+    race.sprint_start ? new Date(race.sprint_start).getTime() : Infinity
   );
   return new Date(firstSessionTime - WINDOW_HOURS * 60 * 60 * 1000);
 }
@@ -108,16 +109,16 @@ async function PicksPageContent({ userId, raceId }: { userId: string; raceId?: s
   const raceLocked = new Date(race.race_start) <= now || eventsWithResults.has("race");
 
   const sessions = [
-    { eventType: "quali" as const, label: "Quali", iso: race.quali_start, size: 3, locked: qualiLocked, show: true },
+    { eventType: "quali" as const, label: "Quali", iso: race.quali_start, size: PICKS_REQUIRED.quali, locked: qualiLocked, show: true },
     {
       eventType: "sprint" as const,
       label: "Sprint",
       iso: race.sprint_start ?? "",
-      size: 10,
+      size: PICKS_REQUIRED.sprint,
       locked: sprintLocked,
-      show: race.has_sprint && !!race.sprint_start
+      show: Boolean(race.sprint_start)
     },
-    { eventType: "race" as const, label: "Race", iso: race.race_start, size: 10, locked: raceLocked, show: true }
+    { eventType: "race" as const, label: "Race", iso: race.race_start, size: PICKS_REQUIRED.race, locked: raceLocked, show: true }
   ]
     .filter((s) => s.show)
     .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime());
@@ -125,18 +126,18 @@ async function PicksPageContent({ userId, raceId }: { userId: string; raceId?: s
   const upcomingSession = sessions.find((s) => new Date(s.iso) > now) ?? sessions[sessions.length - 1];
 
   const statusParts = sessions.map((s) => {
-    const saved = pickCount(pickRows, s.eventType, s.eventType === "quali" ? 3 : 10);
+    const saved = pickCount(pickRows, s.eventType, PICKS_REQUIRED[s.eventType]);
     if (s.locked) return saved ? `${s.label} ✓` : `${s.label} missed`;
     if (!sessionWindowOpen(s.iso) && !s.locked) return `${s.label} soon`;
     return saved ? `${s.label} ✓` : `${s.label} open`;
   });
 
   const allSaved = sessions.every((s) => {
-    const required = s.eventType === "quali" ? 3 : 10;
+    const required = PICKS_REQUIRED[s.eventType];
     return s.locked ? pickCount(pickRows, s.eventType, required) : true;
   });
   const anyOpen = sessions.some(
-    (s) => !s.locked && sessionWindowOpen(s.iso) && !pickCount(pickRows, s.eventType, s.eventType === "quali" ? 3 : 10)
+    (s) => !s.locked && sessionWindowOpen(s.iso) && !pickCount(pickRows, s.eventType, PICKS_REQUIRED[s.eventType])
   );
 
   const raceItems = races.map((r, i) => ({

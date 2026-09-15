@@ -1,16 +1,15 @@
 import type { ReactNode } from "react";
 import {
-  BEST_WEEKENDS_COUNT,
   getEventConfig,
   pickScoreRows
 } from "@/lib/scoring";
 import {
   MAX_DROPPED_WEEKENDS,
   NO_DROP_UNTIL_WEEKENDS,
-  SEASON_SCORING_RACES,
   countingWeekendsFor,
   dropsForScoredWeekends
 } from "@/lib/season-standings";
+import { getCachedRaceWeekends } from "@/lib/cached-reference-data";
 import { F1 } from "@/lib/f1-theme";
 
 const normalQuali = getEventConfig("quali", false);
@@ -20,6 +19,9 @@ const sprintSession = getEventConfig("sprint", true);
 const sprintRace = getEventConfig("race", true);
 
 export default async function RulesPage() {
+  const seasonScoringRaces = (await getCachedRaceWeekends()).length;
+  const bestWeekendsCount = countingWeekendsFor(seasonScoringRaces);
+
   return (
     <>
       {/* Hero */}
@@ -42,13 +44,16 @@ export default async function RulesPage() {
           the actual position, the more you earn.
         </p>
         <p className="mt-3 text-sm leading-relaxed" style={{ color: F1.carbon }}>
-          Season standings use your <strong>best {BEST_WEEKENDS_COUNT} of {SEASON_SCORING_RACES} race weekends</strong>{" "}
+          Season standings use your <strong>best {bestWeekendsCount} of {seasonScoringRaces} race weekends</strong>{" "}
           (Bahrain and Saudi Arabia 2026 were cancelled). Your <strong>worst {MAX_DROPPED_WEEKENDS} weekends are dropped</strong>{" "}
           once you have more than {NO_DROP_UNTIL_WEEKENDS} scored races.
         </p>
       </Section>
 
-      <DropRuleCallout />
+      <DropRuleCallout
+        seasonScoringRaces={seasonScoringRaces}
+        bestWeekendsCount={bestWeekendsCount}
+      />
 
       <Section title="Picks & deadlines">
         <BulletList
@@ -190,8 +195,8 @@ export default async function RulesPage() {
               = sum of your best {countingWeekendsFor(8)} weekends.
             </>,
             <>
-              <strong>Full season ({SEASON_SCORING_RACES} races):</strong> drop {MAX_DROPPED_WEEKENDS} worst → sum of
-              best {BEST_WEEKENDS_COUNT}.
+              <strong>Full season ({seasonScoringRaces} races):</strong> drop {MAX_DROPPED_WEEKENDS} worst → sum of
+              best {bestWeekendsCount}.
             </>,
             <>Leaderboard updates after each session&apos;s results are synced.</>
           ]}
@@ -201,7 +206,13 @@ export default async function RulesPage() {
   );
 }
 
-function DropRuleCallout() {
+function DropRuleCallout({
+  seasonScoringRaces,
+  bestWeekendsCount
+}: {
+  seasonScoringRaces: number;
+  bestWeekendsCount: number;
+}) {
   return (
     <section
       className="rounded-2xl p-4"
@@ -214,13 +225,13 @@ function DropRuleCallout() {
         Once you have <strong>8 scored race weekends</strong>, only your <strong>best 4 weekend totals</strong> count
         toward your season score — your <strong>worst 4 are dropped</strong>. Before that, drops scale up gradually
         (no drops until you pass {NO_DROP_UNTIL_WEEKENDS} weekends). At full season, it becomes best{" "}
-        <strong>{BEST_WEEKENDS_COUNT} of {SEASON_SCORING_RACES}</strong> (drop {MAX_DROPPED_WEEKENDS} worst).
+        <strong>{bestWeekendsCount} of {seasonScoringRaces}</strong> (drop {MAX_DROPPED_WEEKENDS} worst).
       </p>
       <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
         {[
           { label: "4 weekends", value: "All 4 count · 0 dropped" },
           { label: "8 weekends", value: "Best 4 count · 4 dropped" },
-          { label: `${SEASON_SCORING_RACES} weekends`, value: `Best ${BEST_WEEKENDS_COUNT} · ${MAX_DROPPED_WEEKENDS} dropped` }
+          { label: `${seasonScoringRaces} weekends`, value: `Best ${bestWeekendsCount} · ${MAX_DROPPED_WEEKENDS} dropped` }
         ].map((row) => (
           <div
             key={row.label}

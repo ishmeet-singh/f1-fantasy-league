@@ -10,17 +10,12 @@ import type { UserRow } from "@/lib/leaderboard-compute";
 async function fetchNextRaceFromDb() {
   const supabase = getSupabaseAdmin();
 
-  // A race is "done" when race results exist in the DB.
+  // A race is "done" only after an official race classification is published.
   // "Next race" = earliest race that:
   //   1. Has no results (not completed), AND
   //   2. Has race_start in the future OR quali_start in the future
   //      (handles cancelled races where date has passed but no results)
-  const { data: racesWithResults } = await supabase
-    .from("results")
-    .select("race_id")
-    .eq("event_type", "race");
-
-  const completedIds = new Set((racesWithResults ?? []).map(r => r.race_id));
+  const completedIds = new Set(await getCachedRaceCompletions());
 
   const { data: allRaces } = await supabase
     .from("race_weekends")
@@ -59,13 +54,12 @@ export async function getNextRace() {
 export async function getSeasonProgress() {
   const supabase = getSupabaseAdmin();
 
-  const [{ data: allRaces }, { data: completedResults }] = await Promise.all([
+  const [{ data: allRaces }, completedRaceIds] = await Promise.all([
     supabase.from("race_weekends").select("id"),
-    // A race "happened" when it has race results (cancelled races have no results)
-    supabase.from("results").select("race_id").eq("event_type", "race")
+    getCachedRaceCompletions()
   ]);
 
-  const completedIds = new Set((completedResults ?? []).map(r => r.race_id));
+  const completedIds = new Set(completedRaceIds);
   return computeSeasonProgress({
     raceIds: (allRaces ?? []).map((r) => r.id),
     completedRaceIds: completedIds
@@ -108,15 +102,8 @@ export async function getLastCompletedRace(userId?: string): Promise<{
 } | null> {
   const supabase = getSupabaseAdmin();
 
-  // Find the most recently completed race (latest race_start with results)
-  const { data: completedRaces } = await supabase
-    .from("results")
-    .select("race_id")
-    .eq("event_type", "race");
-
-  if (!completedRaces?.length) return null;
-
-  const completedRaceIds = [...new Set(completedRaces.map(r => r.race_id))];
+  const completedRaceIds = await getCachedRaceCompletions();
+  if (!completedRaceIds.length) return null;
 
   const { data: raceRows } = await supabase
     .from("race_weekends")

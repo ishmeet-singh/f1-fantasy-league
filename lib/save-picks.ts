@@ -3,10 +3,10 @@ import {
   configuredReplacementDrivers,
   eligibleDriverIdsForRace
 } from "@/lib/race-driver-eligibility";
+import { PICKS_REQUIRED } from "@/lib/pick-rules";
 import { recomputeRaceScores } from "@/lib/recompute";
 import { EventType } from "@/lib/types";
 
-const sizeByEvent = { quali: 3, sprint: 10, race: 10 } as const;
 const WINDOW_HOURS = 48;
 
 export type SavePicksInput = {
@@ -22,7 +22,7 @@ export type SavePicksInput = {
 
 export async function savePicks(input: SavePicksInput): Promise<{ ok: true } | { error: string }> {
   const admin = getSupabaseAdmin();
-  const maxSize = sizeByEvent[input.eventType];
+  const maxSize = PICKS_REQUIRED[input.eventType];
 
   const { data: race } = await admin
     .from("race_weekends")
@@ -93,12 +93,22 @@ export async function savePicks(input: SavePicksInput): Promise<{ ok: true } | {
     return { error: "Duplicate drivers not allowed" };
   }
 
-  const eligibleDriverIds = eligibleDriverIdsForRace(input.raceId);
+  const { data: raceEntries, error: raceEntriesError } = await admin
+    .from("race_entries")
+    .select("driver_id")
+    .eq("race_id", input.raceId);
+  if (raceEntriesError) return { error: raceEntriesError.message };
+
+  const eligibleDriverIds = raceEntries.length
+    ? new Set(raceEntries.map((entry) => entry.driver_id))
+    : eligibleDriverIdsForRace(input.raceId);
   if (entries.some((entry) => !eligibleDriverIds.has(entry.driver_id))) {
     return { error: "One or more drivers are not entered for this race" };
   }
 
-  const replacementDrivers = configuredReplacementDrivers(input.raceId);
+  const replacementDrivers = raceEntries.length
+    ? []
+    : configuredReplacementDrivers(input.raceId);
   if (replacementDrivers.length) {
     const { error } = await admin
       .from("drivers")
