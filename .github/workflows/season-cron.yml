@@ -1,6 +1,12 @@
 name: season-cron
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/season-cron.yml"
+      - "scripts/sync_fia_entries.py"
+      - "app/api/cron/sync-fia-entries/**"
   schedule:
     # One off-peak frequent schedule runs both time-sensitive jobs. GitHub can
     # delay scheduled workflows; separate overlapping expressions previously
@@ -53,7 +59,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
   sync-fia-entries:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '17 */6 * * *' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '17 */6 * * *' }}
     needs: run
     runs-on: ubuntu-latest
     steps:
