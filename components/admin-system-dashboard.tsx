@@ -207,8 +207,9 @@ export function AdminSystemDashboard({
 
   const recentIssues = useMemo(() => {
     const issues: Array<{ title: string; detail: string; at: string }> = [];
-    for (const run of data.cronRuns) {
-      if (run.status === "error" && run.error) {
+    for (const job of JOBS) {
+      const run = latestRunFor(data, job.id);
+      if (run?.status === "error" && run.error) {
         issues.push({ title: `${run.job} failed`, detail: run.error, at: run.startedAt });
       }
     }
@@ -230,7 +231,12 @@ export function AdminSystemDashboard({
         }
       }
     }
+    const latestEntrySyncs = new Map<string, AdminRaceEntrySync>();
     for (const sync of data.raceEntrySyncs) {
+      const key = `${sync.raceId}:${sync.source}`;
+      if (!latestEntrySyncs.has(key)) latestEntrySyncs.set(key, sync);
+    }
+    for (const sync of latestEntrySyncs.values()) {
       if (sync.status === "rejected" || sync.status === "error") {
         issues.push({
           title: `${ENTRY_SOURCE_LABELS[sync.source]} ${sync.status}`,
@@ -239,7 +245,13 @@ export function AdminSystemDashboard({
         });
       }
     }
+    const latestCalendarChanges = new Map<string, AdminCalendarChange>();
     for (const change of data.calendarChanges) {
+      if (!latestCalendarChanges.has(change.raceId)) {
+        latestCalendarChanges.set(change.raceId, change);
+      }
+    }
+    for (const change of latestCalendarChanges.values()) {
       if (change.changeType === "removal-blocked") {
         issues.push({
           title: `${change.grandPrix} removal needs review`,
