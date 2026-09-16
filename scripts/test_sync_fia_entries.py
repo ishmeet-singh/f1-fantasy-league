@@ -1,6 +1,6 @@
 import unittest
 
-from scripts.sync_fia_entries import find_event_id, parse_race_entries
+from scripts.sync_fia_entries import find_event_id, parse_race_entries, team_from_segment
 
 
 class FiaEntrySyncTests(unittest.TestCase):
@@ -35,6 +35,19 @@ class FiaEntrySyncTests(unittest.TestCase):
         self.assertEqual(set(by_id), {"3", "30", "41", "22"})
         self.assertEqual(by_id["30"]["team"], "Red Bull Racing")
         self.assertEqual(by_id["22"]["team"], "Racing Bulls")
+
+    def test_uses_team_name_before_engine_constructor(self):
+        self.assertEqual(
+            team_from_segment(
+                "ALB Alexander Albon Atlassian Williams F1 Team Williams Mercedes",
+                "Unknown",
+            ),
+            "Williams",
+        )
+        self.assertEqual(
+            team_from_segment("OCO Esteban Ocon TGR Haas F1 Team Haas Ferrari", "Unknown"),
+            "Haas",
+        )
 
 
 if __name__ == "__main__":

@@ -110,11 +110,15 @@ def entry_list_url(event_id: str) -> str | None:
         request_bytes(f"{FIA_BASE_URL}/decision-document-list/ajax/{event_id}").decode("utf-8")
     )
     document_html = html.unescape(flatten_ajax_html(payload))
-    links = re.findall(
-        r'<a[^>]+href="([^"]+)"[^>]*>.*?<div class="title">\s*.*?Entry List\s*</div>',
-        document_html,
-        re.IGNORECASE | re.DOTALL,
-    )
+    links = [
+        href
+        for href, body in re.findall(
+            r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+            document_html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if re.search(r"\bEntry\s+List\b", re.sub(r"<[^>]+>", " ", body), re.IGNORECASE)
+    ]
     if not links:
         return None
     href = links[0].replace("\\/", "/")
@@ -140,9 +144,14 @@ def find_driver_position(text: str, code: str, driver_name: str) -> int | None:
 
 def team_from_segment(segment: str, fallback: str) -> str:
     normalized = normalize(segment)
+    matches: list[tuple[int, str]] = []
     for team, patterns in TEAM_PATTERNS:
-        if any(pattern in normalized for pattern in patterns):
-            return team
+        for pattern in patterns:
+            position = normalized.find(pattern)
+            if position >= 0:
+                matches.append((position, team))
+    if matches:
+        return min(matches, key=lambda item: item[0])[1]
     return fallback or "Unknown"
 
 
