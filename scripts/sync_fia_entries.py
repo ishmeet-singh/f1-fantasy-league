@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Sync official FIA event entry-list PDFs into race_entries.
 
-Runs in GitHub Actions after the calendar sync. It is deliberately conservative:
+Runs in GitHub Actions after the calendar sync and checks recent weekends for
+recalled/corrected entry lists. It is deliberately conservative:
 only a complete 22-driver roster made entirely of known permanent driver numbers
 is published. Existing picks are never deleted.
 """
