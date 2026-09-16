@@ -31,7 +31,9 @@ export async function GET(request: Request) {
         .from("race_weekends")
         .select("id,grand_prix,quali_start,sprint_start,race_start")
         .not("id", "like", "jolpi-%")
-        .gte("race_start", new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString())
+        // Keep the previous two weekends available so corrected/recalled FIA
+        // entry lists can be reconciled and the parser remains continuously exercised.
+        .gte("race_start", new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString())
         .lte("race_start", new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString())
         .order("race_start"),
       supabase.from("drivers").select("id,name,team")
