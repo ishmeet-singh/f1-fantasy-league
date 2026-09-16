@@ -10,6 +10,7 @@ import {
 } from "@/lib/reminder-races";
 import { usersWithCompletePicks, userHasCompletePicks } from "@/lib/reminder-submission";
 import { filterActiveRaceWeekends } from "@/lib/cancelled-races";
+import { startCronRun, endCronRun } from "@/lib/cron-log";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ export async function GET(request: Request) {
   const denied = assertCronAuthorized(request);
   if (denied) return denied;
 
+  const runId = await startCronRun("send-reminders");
+  try {
   const supabase = getSupabaseAdmin();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://f1-fantasy-league-lilac.vercel.app";
 
@@ -44,10 +47,18 @@ export async function GET(request: Request) {
     REMINDER_LOOKAHEAD_MS
   );
 
-  if (!races.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
+  if (!races.length) {
+    await endCronRun(runId, "ok", { summary: { sent: 0, skipped: 0, racesInWindow: 0 } });
+    return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
+  }
 
   const { data: allUsers } = await supabase.from("users").select("id,email,display_name");
-  if (!allUsers?.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
+  if (!allUsers?.length) {
+    await endCronRun(runId, "ok", {
+      summary: { sent: 0, skipped: 0, racesInWindow: races.length }
+    });
+    return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
+  }
 
   let sent = 0;
   let skipped = 0;
@@ -185,5 +196,12 @@ export async function GET(request: Request) {
     }
   }
 
+  const summary = { sent, skipped, racesInWindow: races.length };
+  await endCronRun(runId, "ok", { summary });
   return NextResponse.json({ ok: true, sent, skipped });
+  } catch (error) {
+    console.error("send-reminders cron error:", error);
+    await endCronRun(runId, "error", { error: String(error) });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
 }

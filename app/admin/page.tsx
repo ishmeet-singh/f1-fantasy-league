@@ -79,13 +79,30 @@ export default async function AdminPage() {
               {(users || []).length} player{(users || []).length !== 1 ? "s" : ""} registered
             </p>
           </div>
-          <Link
-            href="/admin/picks"
-            className="shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold transition hover:opacity-90"
-            style={{ borderColor: "rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.08)", color: F1.white }}
-          >
-            Pick monitor →
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/system"
+              className="shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:opacity-90"
+              style={{
+                borderColor: "rgba(255,255,255,0.25)",
+                background: "rgba(255,255,255,0.08)",
+                color: F1.white
+              }}
+            >
+              System health →
+            </Link>
+            <Link
+              href="/admin/picks"
+              className="shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:opacity-90"
+              style={{
+                borderColor: "rgba(255,255,255,0.25)",
+                background: "rgba(255,255,255,0.08)",
+                color: F1.white
+              }}
+            >
+              Pick monitor →
+            </Link>
+          </div>
         </div>
       </div>
 
