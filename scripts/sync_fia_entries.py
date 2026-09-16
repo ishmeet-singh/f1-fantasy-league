@@ -23,8 +23,6 @@ FIA_BASE_URL = "https://www.fia.com"
 CHAMPIONSHIP_DOCUMENTS_URL = (
     f"{FIA_BASE_URL}/documents/championships/fia-formula-one-world-championship-14"
 )
-EXPECTED_RACE_DRIVERS = 22
-
 TEAM_PATTERNS = [
     ("Racing Bulls", ("racing bulls",)),
     ("Red Bull Racing", ("red bull racing",)),
@@ -201,9 +199,10 @@ def main() -> int:
             continue
 
         entries = parse_race_entries(extract_pdf_text(document_url), context["drivers"])
-        if len(entries) != EXPECTED_RACE_DRIVERS:
+        expected_entry_count = int(race["expectedEntryCount"])
+        if len(entries) != expected_entry_count:
             message = (
-                f"{race['grand_prix']}: parsed {len(entries)}/{EXPECTED_RACE_DRIVERS} "
+                f"{race['grand_prix']}: parsed {len(entries)}/{expected_entry_count} "
                 f"race drivers; refusing update"
             )
             failures.append(message)

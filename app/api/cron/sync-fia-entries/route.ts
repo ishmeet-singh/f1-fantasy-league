@@ -16,7 +16,7 @@ const entrySchema = z.object({
 const publishSchema = z.object({
   raceId: z.string().regex(/^\d+$/),
   documentUrl: z.string().url(),
-  entries: z.array(entrySchema).min(20).max(26)
+  entries: z.array(entrySchema).min(20).max(30)
 });
 
 export async function GET(request: Request) {
@@ -25,7 +25,11 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseAdmin();
   const now = Date.now();
-  const [{ data: races, error: racesError }, { data: drivers, error: driversError }] =
+  const [
+    { data: races, error: racesError },
+    { data: drivers, error: driversError },
+    { data: raceEntries, error: raceEntriesError }
+  ] =
     await Promise.all([
       supabase
         .from("race_weekends")
@@ -36,20 +40,42 @@ export async function GET(request: Request) {
         .gte("race_start", new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString())
         .lte("race_start", new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString())
         .order("race_start"),
-      supabase.from("drivers").select("id,name,team")
+      supabase.from("drivers").select("id,name,team"),
+      supabase.from("race_entries").select("race_id")
     ]);
-  if (racesError || driversError) {
+  if (racesError || driversError || raceEntriesError) {
     return NextResponse.json(
-      { error: racesError?.message ?? driversError?.message ?? "Context query failed" },
+      {
+        error:
+          racesError?.message ??
+          driversError?.message ??
+          raceEntriesError?.message ??
+          "Context query failed"
+      },
       { status: 500 }
     );
   }
 
   const driverById = new Map((drivers ?? []).map((driver) => [driver.id, driver]));
+  const entryCountByRace = new Map<string, number>();
+  for (const entry of raceEntries ?? []) {
+    entryCountByRace.set(entry.race_id, (entryCountByRace.get(entry.race_id) ?? 0) + 1);
+  }
+  const countFrequency = new Map<number, number>();
+  for (const count of entryCountByRace.values()) {
+    if (count < 20) continue;
+    countFrequency.set(count, (countFrequency.get(count) ?? 0) + 1);
+  }
+  const seasonEntryCount =
+    [...countFrequency.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 20;
+
   return NextResponse.json({
     ok: true,
     year: new Date().getUTCFullYear(),
-    races: races ?? [],
+    races: (races ?? []).map((race) => ({
+      ...race,
+      expectedEntryCount: entryCountByRace.get(race.id) ?? seasonEntryCount
+    })),
     drivers: DRIVER_CROSSREF_2026.map((crossref) => ({
       driverId: crossref.openf1_id,
       code: crossref.code,
