@@ -38,13 +38,22 @@ export async function POST(req: Request) {
   if (!allUsers?.length) return NextResponse.json({ ok: true, sent: 0, skipped: 0 });
 
   // Who already submitted
-  const { data: submitted } = await supabase
-    .from("predictions")
-    .select("user_id")
-    .eq("race_id", raceId)
-    .eq("event_type", eventType);
+  const [{ data: submitted }, { data: raceEntries, error: raceEntriesError }] = await Promise.all([
+    supabase
+      .from("predictions")
+      .select("user_id,driver_id")
+      .eq("race_id", raceId)
+      .eq("event_type", eventType),
+    supabase.from("race_entries").select("driver_id").eq("race_id", raceId)
+  ]);
+  if (raceEntriesError) {
+    return NextResponse.json({ error: raceEntriesError.message }, { status: 500 });
+  }
+  const eligibleDriverIds = raceEntries?.length
+    ? new Set(raceEntries.map((entry) => entry.driver_id))
+    : undefined;
 
-  const submittedIds = usersWithCompletePicks(submitted ?? [], eventType);
+  const submittedIds = usersWithCompletePicks(submitted ?? [], eventType, eligibleDriverIds);
   const targets = allUsers.filter(u => !submittedIds.has(u.id));
 
   const sessionStart = eventType === "quali" ? race.quali_start
@@ -59,7 +68,7 @@ export async function POST(req: Request) {
 
   for (const user of targets) {
     try {
-      if (await userHasCompletePicks(supabase, user.id, raceId, eventType)) {
+      if (await userHasCompletePicks(supabase, user.id, raceId, eventType, eligibleDriverIds)) {
         skipped++;
         continue;
       }

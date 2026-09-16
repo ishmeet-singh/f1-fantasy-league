@@ -4,12 +4,19 @@ import { PICKS_REQUIRED } from "@/lib/pick-rules";
 
 /** User IDs with a full pick set for this session (not just one row). */
 export function usersWithCompletePicks(
-  rows: { user_id: string }[],
-  eventType: EventType
+  rows: { user_id: string; driver_id?: string }[],
+  eventType: EventType,
+  eligibleDriverIds?: ReadonlySet<string>
 ): Set<string> {
   const required = PICKS_REQUIRED[eventType];
   const counts = new Map<string, number>();
   for (const row of rows) {
+    if (
+      eligibleDriverIds &&
+      (!row.driver_id || !eligibleDriverIds.has(row.driver_id))
+    ) {
+      continue;
+    }
     counts.set(row.user_id, (counts.get(row.user_id) ?? 0) + 1);
   }
   return new Set(
@@ -24,11 +31,12 @@ export async function userHasCompletePicks(
   supabase: AdminClient,
   userId: string,
   raceId: string,
-  eventType: EventType
+  eventType: EventType,
+  eligibleDriverIds?: ReadonlySet<string>
 ): Promise<boolean> {
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from("predictions")
-    .select("*", { count: "exact", head: true })
+    .select("driver_id")
     .eq("user_id", userId)
     .eq("race_id", raceId)
     .eq("event_type", eventType);
@@ -39,5 +47,8 @@ export async function userHasCompletePicks(
     return true;
   }
 
-  return (count ?? 0) >= PICKS_REQUIRED[eventType];
+  const eligibleRows = eligibleDriverIds
+    ? (data ?? []).filter((row) => eligibleDriverIds.has(row.driver_id))
+    : (data ?? []);
+  return eligibleRows.length >= PICKS_REQUIRED[eventType];
 }

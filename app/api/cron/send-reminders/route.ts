@@ -53,6 +53,17 @@ export async function GET(request: Request) {
   let skipped = 0;
 
   for (const race of races as ReminderRaceWeekend[]) {
+    const { data: raceEntries, error: raceEntriesError } = await supabase
+      .from("race_entries")
+      .select("driver_id")
+      .eq("race_id", race.id);
+    if (raceEntriesError) {
+      throw new Error(`Reminder race-entry query failed for ${race.id}: ${raceEntriesError.message}`);
+    }
+    const eligibleDriverIds = raceEntries?.length
+      ? new Set(raceEntries.map((entry) => entry.driver_id))
+      : undefined;
+
     const sessions: { eventType: EventType; start: string }[] = [
       { eventType: "quali", start: race.quali_start },
       ...(race.sprint_start
@@ -73,11 +84,15 @@ export async function GET(request: Request) {
         // Find users who have NOT submitted a complete pick set for this session
         const { data: submitted, error: submittedError } = await supabase
           .from("predictions")
-          .select("user_id")
+          .select("user_id,driver_id")
           .eq("race_id", race.id)
           .eq("event_type", eventType);
 
-        const submittedIds = usersWithCompletePicks(submitted ?? [], eventType);
+        const submittedIds = usersWithCompletePicks(
+          submitted ?? [],
+          eventType,
+          eligibleDriverIds
+        );
         if (submittedError) {
           console.error(
             `Reminder submission query failed for ${race.id}/${eventType}:`,
@@ -105,7 +120,8 @@ export async function GET(request: Request) {
               supabase,
               user.id,
               race.id,
-              eventType
+              eventType,
+              eligibleDriverIds
             );
             if (hasCompletePicks) {
               skipped++;

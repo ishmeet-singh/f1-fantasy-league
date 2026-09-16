@@ -22,8 +22,28 @@ import {
   type ResultSessionRow
 } from "@/lib/result-sessions";
 import type { EventType } from "@/lib/types";
+import { syncObservedRaceEntries } from "@/lib/race-entry-sync";
 
 export type SyncedSession = { raceId: string; eventType: EventType };
+
+type CalendarTiming = {
+  quali_start: string;
+  sprint_start: string | null;
+  race_start: string;
+};
+
+function sameInstant(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) return a === b;
+  return Date.parse(a) === Date.parse(b);
+}
+
+export function calendarTimingChanged(a: CalendarTiming, b: CalendarTiming): boolean {
+  return (
+    !sameInstant(a.quali_start, b.quali_start) ||
+    !sameInstant(a.sprint_start, b.sprint_start) ||
+    !sameInstant(a.race_start, b.race_start)
+  );
+}
 
 function findSessionStart(sessions: { session_name: string; date_start: string }[], names: string[]) {
   const found = sessions.find((session) => names.includes(session.session_name));
@@ -48,6 +68,15 @@ async function syncCalendarOpenF1(year: number) {
   }
   const existingById = new Map((existingDrivers ?? []).map((d) => [d.id, d]));
   const syncedDrivers: { id: string; name: string; team: string }[] = [];
+  const { data: existingRaces, error: existingRacesError } = await supabaseAdmin
+    .from("race_weekends")
+    .select("id,grand_prix,quali_start,sprint_start,race_start")
+    .gte("race_start", `${year}-01-01T00:00:00.000Z`)
+    .lt("race_start", `${year + 1}-01-01T00:00:00.000Z`);
+  if (existingRacesError) {
+    throw new Error(`race calendar query failed: ${existingRacesError.message}`);
+  }
+  const existingRaceById = new Map((existingRaces ?? []).map((race) => [race.id, race]));
 
   for (const d of allDrivers) {
     const incoming = {
@@ -75,6 +104,8 @@ async function syncCalendarOpenF1(year: number) {
   });
 
   const MATCH_TOLERANCE_MS = 3 * 24 * 60 * 60 * 1000; // ±3 days
+  const activeOpenF1Ids = new Set(raceMeetings.map((meeting) => String(meeting.meeting_key)));
+  const explicitlyCancelledIds = new Set<string>();
 
   for (const meeting of raceMeetings) {
     const meetingDateMs = new Date(meeting.date_start).getTime();
@@ -93,6 +124,12 @@ async function syncCalendarOpenF1(year: number) {
     }
 
     const sessions = await fetchSessionsForMeeting(Number(meeting.meeting_key));
+    if (sessions.find((session) => session.session_name === "Race")?.is_cancelled) {
+      activeOpenF1Ids.delete(String(meeting.meeting_key));
+      explicitlyCancelledIds.add(String(meeting.meeting_key));
+      console.log(`[calendar] ${meeting.meeting_name} is marked cancelled by OpenF1`);
+      continue;
+    }
     const raceStart = findSessionStart(sessions, ["Race"]) ?? meeting.date_start;
     // Only use the main "Qualifying" session — never Sprint Qualifying / Sprint Shootout.
     // For sprint weekends the sprint shootout appears earlier chronologically and would
@@ -113,7 +150,7 @@ async function syncCalendarOpenF1(year: number) {
       year
     );
 
-    const { error } = await supabaseAdmin.from("race_weekends").upsert({
+    const incomingRace = {
       id: String(meeting.meeting_key),
       grand_prix: weekendRow.grand_prix,
       race_date: meeting.date_start,
@@ -121,7 +158,27 @@ async function syncCalendarOpenF1(year: number) {
       sprint_start: weekendRow.sprint_start,
       race_start: weekendRow.race_start,
       has_sprint: weekendRow.has_sprint
-    });
+    };
+    const existingRace = existingRaceById.get(incomingRace.id);
+    if (
+      !existingRace ||
+      calendarTimingChanged(existingRace, incomingRace)
+    ) {
+      const { count: affectedPredictions } = await supabaseAdmin
+        .from("predictions")
+        .select("id", { count: "exact", head: true })
+        .eq("race_id", incomingRace.id);
+      await supabaseAdmin.from("calendar_sync_log").insert({
+        race_id: incomingRace.id,
+        grand_prix: incomingRace.grand_prix,
+        change_type: existingRace ? "timing-changed" : "added",
+        previous_values: existingRace ?? null,
+        incoming_values: incomingRace,
+        affected_prediction_rows: affectedPredictions ?? 0
+      });
+    }
+
+    const { error } = await supabaseAdmin.from("race_weekends").upsert(incomingRace);
     if (error) {
       throw new Error(`race ${meeting.meeting_key} upsert failed: ${error.message}`);
     }
@@ -142,6 +199,52 @@ async function syncCalendarOpenF1(year: number) {
         throw new Error(`race ${meeting.meeting_key} entries failed: ${entriesError.message}`);
       }
     }
+  }
+
+  // Remove future rows only when both upstream calendars no longer contain the
+  // event and no user or result data would be destroyed. Otherwise log it for
+  // review and preserve the historical/audit data.
+  for (const existingRace of existingRaces ?? []) {
+    if (!/^\d+$/.test(existingRace.id)) continue;
+    if (Date.parse(existingRace.race_start) < Date.now()) continue;
+    const presentInOpenF1 = activeOpenF1Ids.has(existingRace.id);
+    const existingDate = Date.parse(existingRace.race_start);
+    const presentInJolpi = jolpiDatesMs.some(
+      (jolpiDate) => Math.abs(jolpiDate - existingDate) <= MATCH_TOLERANCE_MS
+    );
+    if (
+      !explicitlyCancelledIds.has(existingRace.id) &&
+      (presentInOpenF1 || presentInJolpi)
+    ) {
+      continue;
+    }
+
+    const [{ count: predictions }, { count: results }] = await Promise.all([
+      supabaseAdmin
+        .from("predictions")
+        .select("id", { count: "exact", head: true })
+        .eq("race_id", existingRace.id),
+      supabaseAdmin
+        .from("results")
+        .select("id", { count: "exact", head: true })
+        .eq("race_id", existingRace.id)
+    ]);
+    const affectedRows = (predictions ?? 0) + (results ?? 0);
+    if (affectedRows === 0) {
+      const { error: deleteError } = await supabaseAdmin
+        .from("race_weekends")
+        .delete()
+        .eq("id", existingRace.id);
+      if (deleteError) throw new Error(`remove race ${existingRace.id}: ${deleteError.message}`);
+    }
+    await supabaseAdmin.from("calendar_sync_log").insert({
+      race_id: existingRace.id,
+      grand_prix: existingRace.grand_prix,
+      change_type: affectedRows === 0 ? "removed" : "removal-blocked",
+      previous_values: existingRace,
+      incoming_values: null,
+      affected_prediction_rows: affectedRows
+    });
   }
 }
 
@@ -220,6 +323,18 @@ async function syncResultsOpenF1(): Promise<SyncedSession[]> {
     if (!eventsToSync.length) {
       console.log(`[${race.id}] All sessions already synced — skipping`);
       continue;
+    }
+
+    try {
+      const entrySync = await syncObservedRaceEntries(String(race.id), now);
+      if (entrySync?.status === "updated") {
+        console.log(
+          `[${race.id}] Competitive-session roster updated (+${entrySync.addedDriverIds?.length ?? 0}/-${entrySync.removedDriverIds?.length ?? 0})`
+        );
+      }
+    } catch (error) {
+      // Result publication must continue if the optional roster reconciliation fails.
+      console.warn(`[${race.id}] Competitive-session roster sync failed:`, error);
     }
 
     // Fetch all eligible events in parallel

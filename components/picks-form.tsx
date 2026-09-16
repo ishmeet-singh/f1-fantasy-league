@@ -24,7 +24,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { F1 } from "@/lib/f1-theme";
 
-type Driver = { id: string; name: string; team: string };
+type Driver = { id: string; name: string; team: string; eligible?: boolean };
 type EventType = "quali" | "sprint" | "race";
 
 const EVENT_LABELS: Record<EventType, string> = {
@@ -196,8 +196,8 @@ function PickSlot({
       style={{
         ...style,
         opacity: isDragging ? 0.35 : 1,
-        borderColor: isOver ? F1.red : F1.gridLine,
-        background: isOver ? F1.redLight : F1.white,
+        borderColor: isOver || driver.eligible === false ? F1.red : F1.gridLine,
+        background: isOver || driver.eligible === false ? F1.redLight : F1.white,
         boxShadow: isOver ? `0 0 0 2px ${F1.red}33` : undefined
       }}
     >
@@ -209,6 +209,11 @@ function PickSlot({
           <span className="truncate font-semibold" style={{ color: F1.carbon }}>
             {driver.name}
           </span>
+          {driver.eligible === false && (
+            <span className="shrink-0 text-[10px] font-bold uppercase" style={{ color: F1.red }}>
+              Unavailable
+            </span>
+          )}
         </div>
       </div>
       <button
@@ -332,10 +337,16 @@ export function PicksForm({
   const driverById = new Map(drivers.map((d) => [d.id, d]));
   const filledCount = slots.filter(Boolean).length;
   const allFilled = filledCount === size;
+  const unavailableDriverIds = new Set(
+    drivers.filter((driver) => driver.eligible === false).map((driver) => driver.id)
+  );
+  const unavailableSelections = slots.filter(
+    (driverId): driverId is string => Boolean(driverId && unavailableDriverIds.has(driverId))
+  );
   const hasUnsavedChanges = JSON.stringify(slots) !== JSON.stringify(savedSlots);
   const hasSavedPicks = savedSlots.some(Boolean);
   const poolIds = new Set(slots.filter(Boolean) as string[]);
-  const pool = drivers.filter((d) => !poolIds.has(d.id));
+  const pool = drivers.filter((d) => d.eligible !== false && !poolIds.has(d.id));
   const sortableIds = slots.map((_, i) => slotId(i));
 
   const sensors = useSensors(
@@ -629,9 +640,18 @@ export function PicksForm({
       </DndContext>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
+        {unavailableSelections.length > 0 && (
+          <p
+            className="w-full rounded-xl border px-3 py-2 text-sm"
+            style={{ background: "#FFFBEB", color: "#92400E", borderColor: "#FDE68A" }}
+          >
+            The official entry list changed. Replace the unavailable driver
+            {unavailableSelections.length === 1 ? "" : "s"} highlighted in your saved picks before updating.
+          </p>
+        )}
         <button
           type="button"
-          disabled={status === "loading" || !allFilled}
+          disabled={status === "loading" || !allFilled || unavailableSelections.length > 0}
           onClick={submit}
           className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: F1.red }}

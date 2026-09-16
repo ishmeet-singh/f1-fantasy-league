@@ -26,4 +26,14 @@ describe("usersWithCompletePicks", () => {
     expect(complete.has(userA)).toBe(true);
     expect(complete.has(userB)).toBe(false);
   });
+
+  it("treats a withdrawn-driver pick as incomplete", () => {
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      user_id: userA,
+      driver_id: String(index + 1)
+    }));
+    const eligible = new Set(Array.from({ length: 10 }, (_, index) => String(index + 2)));
+
+    expect(usersWithCompletePicks(rows, "race", eligible).has(userA)).toBe(false);
+  });
 });

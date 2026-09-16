@@ -18,11 +18,12 @@ export type OpenF1Meeting = {
   date_start: string;
 };
 
-type OpenF1Session = {
+export type OpenF1Session = {
   session_key: number;
   session_name: string;
   date_start: string;
   date_end?: string | null;
+  is_cancelled?: boolean;
 };
 
 type OpenF1Classification = {
@@ -75,12 +76,59 @@ export async function fetchDrivers() {
   return fetchJson<OpenF1Driver[]>("/v1/drivers?session_key=latest");
 }
 
+export async function fetchDriversForSession(sessionKey: number) {
+  return fetchJson<OpenF1Driver[]>(`/v1/drivers?session_key=${sessionKey}`);
+}
+
 export async function fetchMeetings(year: number) {
   return fetchJson<OpenF1Meeting[]>(`/v1/meetings?year=${year}`);
 }
 
 export async function fetchSessionsForMeeting(meetingKey: number) {
   return fetchJson<OpenF1Session[]>(`/v1/sessions?meeting_key=${meetingKey}`);
+}
+
+const COMPETITIVE_SESSION_NAMES = new Set([
+  "Sprint Qualifying",
+  "Sprint Shootout",
+  "Sprint",
+  "Qualifying",
+  "Race"
+]);
+
+export function selectLatestStartedCompetitiveSession(
+  sessions: ReadonlyArray<OpenF1Session>,
+  nowMs = Date.now()
+): OpenF1Session | null {
+  return (
+    sessions
+      .filter(
+        (session) =>
+          COMPETITIVE_SESSION_NAMES.has(session.session_name) &&
+          Number.isFinite(Date.parse(session.date_start)) &&
+          Date.parse(session.date_start) <= nowMs
+      )
+      .sort((a, b) => Date.parse(b.date_start) - Date.parse(a.date_start))[0] ?? null
+  );
+}
+
+export async function fetchObservedCompetitionDrivers(
+  meetingKey: number,
+  nowMs = Date.now()
+): Promise<{ session: OpenF1Session; drivers: OpenF1Driver[] } | null> {
+  const sessions = await fetchSessionsForMeeting(meetingKey);
+  const session = selectLatestStartedCompetitiveSession(sessions, nowMs);
+  if (!session) return null;
+
+  const drivers = await fetchDriversForSession(session.session_key);
+  const uniqueDrivers = new Map(
+    drivers
+      .filter((driver) => String(driver.driver_number).trim() && driver.full_name?.trim())
+      .map((driver) => [String(driver.driver_number), driver])
+  );
+  if (uniqueDrivers.size < 20) return null;
+
+  return { session, drivers: [...uniqueDrivers.values()] };
 }
 
 export function isSessionResultPublicationReady(

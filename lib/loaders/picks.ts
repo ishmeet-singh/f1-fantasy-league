@@ -5,7 +5,7 @@ import { eligibleDriversForRace } from "@/lib/race-driver-eligibility";
 
 export type PicksPageData = {
   races: RaceWeekendRow[];
-  drivers: { id: string; name: string; team: string }[];
+  drivers: { id: string; name: string; team: string; eligible?: boolean }[];
   race: RaceWeekendRow;
   pickRows: { driver_id: string; predicted_position: number; event_type: string }[];
   existingResults: { event_type: string; driver_id: string; actual_position: number }[];
@@ -79,16 +79,26 @@ export async function loadPicksPage(
       event_type: p.event_type
     }));
   const raceEntries = raceEntriesRes.data ?? [];
+  const eligibleDrivers = raceEntries.length
+    ? raceEntries.map((entry) => ({
+        id: entry.driver_id,
+        name: entry.driver_name,
+        team: entry.team,
+        eligible: true
+      }))
+    : eligibleDriversForRace(race.id, drivers).map((driver) => ({
+        ...driver,
+        eligible: true
+      }));
+  const eligibleIds = new Set(eligibleDrivers.map((driver) => driver.id));
+  const selectedIds = new Set(pickRows.map((pick) => pick.driver_id));
+  const withdrawnSelectedDrivers = drivers
+    .filter((driver) => selectedIds.has(driver.id) && !eligibleIds.has(driver.id))
+    .map((driver) => ({ ...driver, eligible: false }));
 
   return {
     races,
-    drivers: raceEntries.length
-      ? raceEntries.map((entry) => ({
-          id: entry.driver_id,
-          name: entry.driver_name,
-          team: entry.team
-        }))
-      : eligibleDriversForRace(race.id, drivers),
+    drivers: [...eligibleDrivers, ...withdrawnSelectedDrivers],
     race,
     pickRows,
     existingResults: resultsRes.data ?? [],
