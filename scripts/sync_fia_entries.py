@@ -15,7 +15,10 @@ import json
 import os
 import re
 import sys
+import time
 import unicodedata
+import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -23,6 +26,8 @@ FIA_BASE_URL = "https://www.fia.com"
 CHAMPIONSHIP_DOCUMENTS_URL = (
     f"{FIA_BASE_URL}/documents/championships/fia-formula-one-world-championship-14"
 )
+FIA_CRAWL_DELAY_SECONDS = 10.0
+_last_fia_request_at: float | None = None
 TEAM_PATTERNS = [
     ("Racing Bulls", ("racing bulls",)),
     ("Red Bull Racing", ("red bull racing",)),
@@ -38,6 +43,20 @@ TEAM_PATTERNS = [
 ]
 
 
+def wait_for_fia_crawl_delay(url: str) -> None:
+    """Respect fia.com's robots.txt delay without slowing calls to our app."""
+    global _last_fia_request_at
+    if urllib.parse.urlparse(url).hostname not in {"fia.com", "www.fia.com"}:
+        return
+
+    now = time.monotonic()
+    if _last_fia_request_at is not None:
+        remaining = FIA_CRAWL_DELAY_SECONDS - (now - _last_fia_request_at)
+        if remaining > 0:
+            time.sleep(remaining)
+    _last_fia_request_at = time.monotonic()
+
+
 def request_bytes(url: str, secret: str | None = None, body: dict[str, Any] | None = None) -> bytes:
     headers = {"User-Agent": "f1-fantasy-league/1.0"}
     if secret:
@@ -46,6 +65,7 @@ def request_bytes(url: str, secret: str | None = None, body: dict[str, Any] | No
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
+    wait_for_fia_crawl_delay(url)
     request = urllib.request.Request(url, data=data, headers=headers)
     with urllib.request.urlopen(request, timeout=45) as response:
         return response.read()
@@ -185,7 +205,11 @@ def main() -> int:
     cron_secret = os.environ["CRON_SECRET"]
     endpoint = f"{app_base_url}/api/cron/sync-fia-entries"
     context = json.loads(request_bytes(endpoint, secret=cron_secret))
-    events = event_document_ids(int(context["year"]))
+    try:
+        events = event_document_ids(int(context["year"]))
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+        print(f"[fia] FIA unavailable; retaining existing race entries: {error}", file=sys.stderr)
+        return 0
     failures: list[str] = []
 
     for race in context["races"]:
@@ -193,12 +217,21 @@ def main() -> int:
         if not event_id:
             print(f"[fia] {race['grand_prix']}: no FIA event page yet")
             continue
-        document_url = entry_list_url(event_id)
+        try:
+            document_url = entry_list_url(event_id)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+            print(f"[fia] FIA unavailable; retaining existing race entries: {error}", file=sys.stderr)
+            return 0
         if not document_url:
             print(f"[fia] {race['grand_prix']}: entry list not published yet")
             continue
 
-        entries = parse_race_entries(extract_pdf_text(document_url), context["drivers"])
+        try:
+            pdf_text = extract_pdf_text(document_url)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+            print(f"[fia] FIA unavailable; retaining existing race entries: {error}", file=sys.stderr)
+            return 0
+        entries = parse_race_entries(pdf_text, context["drivers"])
         expected_entry_count = int(race["expectedEntryCount"])
         if len(entries) != expected_entry_count:
             message = (

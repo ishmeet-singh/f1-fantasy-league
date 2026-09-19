@@ -1,9 +1,16 @@
+import io
+import json
 import unittest
+from unittest.mock import patch
 
+import scripts.sync_fia_entries as sync_fia_entries
 from scripts.sync_fia_entries import find_event_id, parse_race_entries, team_from_segment
 
 
 class FiaEntrySyncTests(unittest.TestCase):
+    def tearDown(self):
+        sync_fia_entries._last_fia_request_at = None
+
     def test_matches_calendar_and_fia_event_names(self):
         events = {
             "italian grand prix": "60309",
@@ -48,6 +55,37 @@ class FiaEntrySyncTests(unittest.TestCase):
             team_from_segment("OCO Esteban Ocon TGR Haas F1 Team Haas Ferrari", "Unknown"),
             "Haas",
         )
+
+    @patch("scripts.sync_fia_entries.time.sleep")
+    @patch("scripts.sync_fia_entries.time.monotonic", side_effect=[100.0, 100.0, 103.0, 110.0])
+    def test_applies_crawl_delay_only_between_fia_requests(self, _monotonic, sleep):
+        sync_fia_entries.wait_for_fia_crawl_delay("https://www.fia.com/documents")
+        sync_fia_entries.wait_for_fia_crawl_delay("https://example.vercel.app/api/cron")
+        sync_fia_entries.wait_for_fia_crawl_delay("https://www.fia.com/entry-list.pdf")
+
+        sleep.assert_called_once_with(7.0)
+
+    @patch.dict(
+        "os.environ",
+        {"APP_BASE_URL": "https://example.vercel.app", "CRON_SECRET": "test-secret"},
+    )
+    @patch("scripts.sync_fia_entries.request_bytes")
+    def test_first_fia_403_defers_without_failing(self, request_bytes):
+        request_bytes.side_effect = [
+            json.dumps({"year": 2026, "races": [], "drivers": []}).encode(),
+            sync_fia_entries.urllib.error.HTTPError(
+                sync_fia_entries.CHAMPIONSHIP_DOCUMENTS_URL,
+                403,
+                "Forbidden",
+                {},
+                io.BytesIO(),
+            ),
+        ]
+
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            self.assertEqual(sync_fia_entries.main(), 0)
+
+        self.assertIn("retaining existing race entries", stderr.getvalue())
 
 
 if __name__ == "__main__":

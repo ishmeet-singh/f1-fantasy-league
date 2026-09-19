@@ -35,9 +35,9 @@ export async function GET(request: Request) {
         .from("race_weekends")
         .select("id,grand_prix,quali_start,sprint_start,race_start")
         .not("id", "like", "jolpi-%")
-        // Keep the previous two weekends available so corrected/recalled FIA
-        // entry lists can be reconciled and the parser remains continuously exercised.
-        .gte("race_start", new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString())
+        // Only upcoming races need an entry-list refresh. Once a race starts,
+        // observed OpenF1 session data has higher precedence than FIA documents.
+        .gte("race_start", new Date(now).toISOString())
         .lte("race_start", new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString())
         .order("race_start"),
       supabase.from("drivers").select("id,name,team"),
