@@ -76,66 +76,282 @@ export default function BacklogPage() {
 
       </Section>
 
-      {/* ── FEATURES ── */}
-      <Section title="Feature Backlog">
+      {/* ── ENGAGEMENT ROADMAP ── */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400 space-y-1">
+        <p className="font-semibold text-white">Engagement roadmap</p>
+        <p>
+          KPI: engagement, retention and usage. Today the only touchpoint is the pre-deadline reminder email —
+          nothing pulls players back after results, during sessions, between races or in the off-season.
+          Phases are ordered by impact vs effort and by the season calendar (2026 ends in December).
+        </p>
+      </div>
+
+      <Section title="Phase 1 — Now (before season end)">
 
         <BacklogItem
-          id="F-01"
-          priority="P3"
-          title="Push notifications when results are in"
+          id="E-01"
+          priority="P1"
+          title="Product analytics + engagement events"
           status="backlog"
-          addedBecause="Users currently only know results are in by opening the app. A push notification or WhatsApp message when qualifying/race results are published would drive re-engagement."
+          addedBecause="There is no analytics in the app, so there's no way to tell whether any feature below moves engagement. Needs to land first to get a baseline."
           whatToDo={[
-            "Option A: Browser push notifications (Web Push API) — requires VAPID keys, service worker",
-            "Option B: WhatsApp via Twilio or similar — requires user phone numbers",
-            "Option C: Email notification when results sync — simpler, uses existing email infra",
-            "Easiest: add a 'results published' email trigger in syncResults() after recompute"
+            "Add Vercel Analytics (page views) or PostHog (events + funnels)",
+            "Track: picks_submitted (per race/session), results_viewed, leaderboard_viewed, share_clicked",
+            "Track email clicks via UTM params on reminder + results email links",
+            "Baseline metrics: pick submission rate per race, % of players returning within 24h of results, weekly active players"
           ]}
-          impact="Re-engagement immediately after results. The exciting moment of seeing your score."
+          impact="Every later feature can be measured against a baseline."
         />
 
         <BacklogItem
-          id="F-02"
-          priority="P3"
-          title="Season end summary / recap page"
+          id="F-01"
+          priority="P1"
+          title="'Results are in' notification with your score + rank change"
           status="backlog"
-          addedBecause="At the end of the 2026 season, there's no way to see season highlights: who won, most exact hits, biggest single race score, most consistent, worst single race prediction, etc."
+          addedBecause="Users only know results are in by opening the app. The moment of seeing your score is the most exciting moment of the weekend and nothing currently triggers it."
           whatToDo={[
-            "Create /recap page (accessible after last race)",
-            "Stats: winner, most exacts, best single race, most consistent (lowest variance)",
-            "Fun stats: worst prediction of the season, biggest comeback, etc.",
-            "Shareable cards per player"
+            "Send email after recompute publishes a session's scores (hook into result publish, not every recompute)",
+            "Content: your session points, weekend total, league rank before → after, who overtook you / who you overtook",
+            "Dedupe via notification_log (one email per user per race session)",
+            "Reuse email-brand.ts styling and Resend infra from reminder emails",
+            "Later: deliver via web push once E-08 lands"
           ]}
-          impact="Satisfying closure at season end. Shareable content."
+          impact="Re-engagement immediately after results, every weekend."
+        />
+
+        <BacklogItem
+          id="E-02"
+          priority="P1"
+          title="Shareable weekend score card (OG image)"
+          status="backlog"
+          addedBecause="The league's real social space is the WhatsApp group. Nothing in the app produces content worth pasting there."
+          whatToDo={[
+            "Add /api/og/weekend?race=…&user=… using next/og ImageResponse",
+            "Card: player name, race, weekend points, league position, best pick highlight",
+            "'Share' button on results page using Web Share API (fallback: copy link)",
+            "Shared link unfurls with the card via openGraph metadata"
+          ]}
+          impact="Free distribution in the group chat; banter drives return visits."
+        />
+
+        <BacklogItem
+          id="E-03"
+          priority="P1"
+          title="Pick consensus + contrarian highlights"
+          status="backlog"
+          addedBecause="League picks are already revealed per player after lock (LeaguePicks), but there's no aggregate view. The interesting story is 'everyone picked X, only you picked Y'."
+          whatToDo={[
+            "Consensus view per session: % of league picking each driver per position",
+            "Flag unique / contrarian picks per player",
+            "After results: highlight contrarian picks that paid off",
+            "Surface on results tabs alongside LeaguePicks"
+          ]}
+          impact="Makes the post-lock window interesting and fuels banter."
+        />
+
+      </Section>
+
+      <Section title="Phase 2 — Remaining 2026 races">
+
+        <BacklogItem
+          id="E-04"
+          priority="P2"
+          title="Live provisional scoring during sessions"
+          status="backlog"
+          addedBecause="Nothing happens in the app during qualifying/sprint/race itself. OpenF1 exposes live positions and we already have an authenticated token (openf1-token.ts)."
+          whatToDo={[
+            "Poll OpenF1 live positions every 30–60s while a session is running",
+            "Score current positions with scoring.ts (pure function) — never write to scores table",
+            "Live page: provisional league table, your provisional points, biggest movers",
+            "Clearly label as provisional; official scoring still runs from stable result sets"
+          ]}
+          impact="Turns the app into a second screen during races — biggest single engagement lever."
         />
 
         <BacklogItem
           id="F-03"
-          priority="P3"
-          title="Head-to-head comparison between two players"
+          priority="P2"
+          title="Head-to-head comparison + pinned rival"
           status="backlog"
           addedBecause="Players want to compare their performance specifically against one friend, not just the full leaderboard."
           whatToDo={[
             "Add /compare?a=userId&b=userId route",
             "Side-by-side: race by race points, total, exact hits, best/worst race",
             "Who won more head-to-heads across completed races",
-            "Link from leaderboard row (click a player to compare with yourself)"
+            "Link from leaderboard row (click a player to compare with yourself)",
+            "Optional: pin a rival on profile; show 'you vs rival' on dashboard and in results email"
           ]}
           impact="More social engagement between specific rivalries."
         />
 
         <BacklogItem
+          id="E-05"
+          priority="P2"
+          title="Streaks + achievements / badges"
+          status="backlog"
+          addedBecause="Players far down the leaderboard have little reason to keep submitting. Small personal wins keep them engaged."
+          whatToDo={[
+            "Submission streak (consecutive weekends with picks submitted)",
+            "Badges: Perfect Podium, Exact P10, Contrarian (correct pick few others made), Comeback, Clean Sweep",
+            "Compute deterministically during recompute (user_achievements table)",
+            "Show on profile + leaderboard row; mention newly earned badges in results email"
+          ]}
+          impact="Habit loop + identity; retention for players not in title contention."
+        />
+
+      </Section>
+
+      <Section title="Phase 3 — Season finale (December)">
+
+        <BacklogItem
+          id="F-02"
+          priority="P2"
+          title="Season Wrapped / recap page"
+          status="backlog"
+          addedBecause="At the end of the 2026 season, there's no way to see season highlights: who won, most exact hits, biggest single race score, most consistent, worst single race prediction, etc."
+          whatToDo={[
+            "Create /recap page (accessible after last race)",
+            "Stats: winner, most exacts, best single race, most consistent (lowest variance)",
+            "Fun stats: worst prediction of the season, biggest comeback, favourite driver, etc.",
+            "Story-style per-player slides + shareable cards (reuse E-02 OG infra)",
+            "Send recap email after final race"
+          ]}
+          impact="Peak retention moment of the year; sets up return for 2027."
+        />
+
+      </Section>
+
+      <Section title="Phase 4 — Off-season (ready for 2027)">
+
+        <BacklogItem
+          id="E-06"
+          priority="P2"
+          title="Multiple leagues with invite links"
+          status="backlog"
+          addedBecause="The app supports exactly one private group. Letting anyone create a league and share a join link is the biggest usage multiplier."
+          whatToDo={[
+            "Tables: leagues, league_members (role: owner/member), invite codes",
+            "Scope leaderboards, league picks, notifications by league",
+            "RLS policies per league membership",
+            "Migrate existing group into a default league",
+            "Join flow: /join/[code] → magic link → added to league"
+          ]}
+          impact="Growth beyond one friend group. Largest change — schedule for off-season."
+        />
+
+        <BacklogItem
+          id="E-07"
+          priority="P2"
+          title="Pre-season long-term predictions"
+          status="backlog"
+          addedBecause="Weekly picks give no reason to care about the season arc or to visit in the off-season."
+          whatToDo={[
+            "Before round 1: predict Drivers' champion, Constructors' champion, first-time winner, most DNFs, etc.",
+            "Locked until season end; scored at the final race",
+            "Separate points pool or bonus on top of best-18 total (decide before launch)"
+          ]}
+          impact="Year-long investment; off-season engagement."
+        />
+
+        <BacklogItem
+          id="E-08"
+          priority="P2"
+          title="Installable app (PWA) + web push notifications"
+          status="backlog"
+          addedBecause="No manifest or service worker. Email is slow and easy to miss for time-critical nudges, and magic-link re-login adds friction."
+          whatToDo={[
+            "Add manifest + icons + service worker",
+            "Web Push (VAPID) subscriptions stored per user",
+            "Deliver reminders (picks lock in 1h) and results-in (F-01) via push, email as fallback",
+            "Per-user notification preferences on profile"
+          ]}
+          impact="Higher pick submission rate and faster return after results."
+        />
+
+        <BacklogItem
+          id="E-09"
+          priority="P3"
+          title="Weekend bonus questions"
+          status="backlog"
+          addedBecause="Picks are one visit per session. Quick side-questions give another reason to come back mid-week."
+          whatToDo={[
+            "Per-race questions: fastest lap, Driver of the Day, safety car yes/no, first DNF, teammate battle",
+            "Small separate points pool so best-18 fairness is preserved",
+            "Admin can configure/resolve questions where data isn't available from APIs"
+          ]}
+          impact="Extra touchpoints per weekend."
+        />
+
+        <BacklogItem
+          id="E-10"
+          priority="P3"
+          title="Joker chips (double points)"
+          status="backlog"
+          addedBecause="No strategic layer beyond the picks themselves; players far behind have no way to catch up."
+          whatToDo={[
+            "N jokers per season; apply to one session before lock to double its points",
+            "Define interaction with best-18 dropping rule",
+            "Store in predictions/weekend metadata so recompute stays deterministic"
+          ]}
+          impact="Strategy + comeback potential keeps the mid-table engaged."
+        />
+
+        <BacklogItem
           id="F-04"
           priority="P3"
-          title="Pick history page per player"
+          title="Pick history + personal prediction insights"
           status="backlog"
-          addedBecause="No way to see all of a player's predictions across the full season in one view."
+          addedBecause="No way to see all of a player's predictions across the full season in one view, or learn from patterns."
           whatToDo={[
             "Profile page expansion: table of all races, picks submitted, points scored",
-            "Show accuracy by driver (which drivers you tend to pick correctly vs not)",
-            "Only visible to the logged-in user for their own data"
+            "Accuracy by driver ('you overrate Hamilton by 2.3 places on average')",
+            "Accuracy trend over the season, best/worst circuit types",
+            "Build on personal-stats.ts; only visible to the logged-in user for their own data"
           ]}
-          impact="Insight into personal prediction patterns over the season."
+          impact="Insight into personal prediction patterns; reason to revisit profile."
+        />
+
+      </Section>
+
+      <Section title="Unscheduled">
+
+        <BacklogItem
+          id="E-11"
+          priority="P3"
+          title="Smart pick pre-fill"
+          status="backlog"
+          addedBecause="Missing a weekend often comes from friction, not lack of interest."
+          whatToDo={[
+            "Pre-fill race picks from qualifying result or your previous picks",
+            "Adjust with existing drag-and-drop; explicit 'submit' still required"
+          ]}
+          impact="Fewer skipped sessions."
+        />
+
+        <BacklogItem
+          id="E-12"
+          priority="P3"
+          title="Calendar subscription (.ics) with pick deadlines"
+          status="backlog"
+          addedBecause="Deadlines only live in the app and reminder emails."
+          whatToDo={[
+            "Per-user .ics feed: session times + pick lock deadlines",
+            "'Add to calendar' link on profile and dashboard"
+          ]}
+          impact="Every race weekend lands in players' calendars."
+        />
+
+        <BacklogItem
+          id="E-13"
+          priority="P3"
+          title="Reactions / banter on race results"
+          status="backlog"
+          addedBecause="Banter happens off-platform; light in-app reactions keep some of it next to the results."
+          whatToDo={[
+            "Emoji reactions on each player's weekend result",
+            "Optional short comment thread per race"
+          ]}
+          impact="Social presence on results pages."
         />
 
         <BacklogItem
