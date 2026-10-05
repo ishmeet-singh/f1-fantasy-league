@@ -116,38 +116,17 @@ export async function savePicks(input: SavePicksInput): Promise<{ ok: true } | {
     if (error) return { error: error.message };
   }
 
-  const { data: existing } = await admin
-    .from("predictions")
-    .select("created_at")
-    .eq("user_id", input.userId)
-    .eq("race_id", input.raceId)
-    .eq("event_type", input.eventType)
-    .limit(1)
-    .maybeSingle();
-
-  const firstSubmittedAt = input.createdAt ?? existing?.created_at ?? new Date().toISOString();
-  const nowIso = new Date().toISOString();
-
-  await admin
-    .from("predictions")
-    .delete()
-    .eq("user_id", input.userId)
-    .eq("race_id", input.raceId)
-    .eq("event_type", input.eventType);
-
-  const withTimestamps = entries.map((e) => ({
-    ...e,
-    created_at: firstSubmittedAt,
-    updated_at: nowIso
-  }));
-  let { error } = await admin.from("predictions").insert(withTimestamps);
-  if (error?.message?.includes("updated_at")) {
-    const fallback = await admin.from("predictions").insert(
-      entries.map((e) => ({ ...e, created_at: firstSubmittedAt }))
-    );
-    error = fallback.error;
-  }
+  const { data: savedRows, error } = await admin.rpc("save_predictions", {
+    p_user_id: input.userId,
+    p_race_id: input.raceId,
+    p_event_type: input.eventType,
+    p_picks: entries.map(({ driver_id, predicted_position }) => ({ driver_id, predicted_position })),
+    p_created_at: input.createdAt ?? null
+  });
   if (error) return { error: error.message };
+  if (savedRows !== entries.length) {
+    return { error: `Saved ${savedRows ?? 0} of ${entries.length} picks — please try again` };
+  }
 
   if (input.skipLockCheck) {
     const recompute = await recomputeRaceScores(input.raceId);

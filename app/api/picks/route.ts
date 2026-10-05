@@ -13,7 +13,11 @@ export async function POST(req: Request) {
   const user = requireUserApi();
   if (user instanceof NextResponse) return user;
 
-  const body = schema.parse(await req.json());
+  const parsed = schema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid picks request — refresh the page and try again" }, { status: 400 });
+  }
+  const body = parsed.data;
   const result = await savePicks({
     userId: user.id,
     raceId: body.raceId,

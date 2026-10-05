@@ -22,10 +22,15 @@ import {
   arrayMove
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useRouter } from "next/navigation";
 import { F1 } from "@/lib/f1-theme";
 
 type Driver = { id: string; name: string; team: string; eligible?: boolean };
 type EventType = "quali" | "sprint" | "race";
+
+const UNSAVED_PROMPT = "You have unsaved picks. Leave without saving?";
+/** Several forms can be unsaved at once; prompt only once per click. */
+const promptedClicks = new WeakSet<Event>();
 
 const EVENT_LABELS: Record<EventType, string> = {
   quali: "Qualifying",
@@ -324,6 +329,7 @@ export function PicksForm({
   const dropHoverRef = useRef<{ id: string; since: number } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdown = useCountdown(deadline, locked);
+  const router = useRouter();
 
   useEffect(() => {
     if (!activeId) return;
@@ -345,6 +351,36 @@ export function PicksForm({
   );
   const hasUnsavedChanges = JSON.stringify(slots) !== JSON.stringify(savedSlots);
   const hasSavedPicks = savedSlots.some(Boolean);
+
+  useEffect(() => {
+    if (locked || !hasUnsavedChanges) return;
+
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      // Safari and older Chrome only prompt when returnValue is non-empty.
+      event.returnValue = UNSAVED_PROMPT;
+      return UNSAVED_PROMPT;
+    }
+
+    function onDocumentClick(event: MouseEvent) {
+      if (promptedClicks.has(event)) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      if (!anchor || anchor.getAttribute("target") === "_blank") return;
+      promptedClicks.add(event);
+      if (!window.confirm(UNSAVED_PROMPT)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onDocumentClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onDocumentClick, true);
+    };
+  }, [locked, hasUnsavedChanges]);
   const poolIds = new Set(slots.filter(Boolean) as string[]);
   const pool = drivers.filter((d) => d.eligible !== false && !poolIds.has(d.id));
   const sortableIds = slots.map((_, i) => slotId(i));
@@ -483,15 +519,21 @@ export function PicksForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ raceId, eventType, picks })
       });
-      const json = await res.json();
+      const json: { error?: string } = await res.json().catch(() => ({}));
       if (!res.ok) {
         setStatus("error");
-        setErrorMsg(json.error || "Failed to save picks");
+        setErrorMsg(
+          res.status === 401
+            ? "Your session expired — sign in again, then re-save your picks"
+            : json.error || `Picks not saved (server error ${res.status}) — please try again`
+        );
       } else {
         setStatus("saved");
         setSavedSlots([...slots]);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => setStatus("idle"), 3000);
+        // Drops cached server renders so other pages don't show pre-save picks.
+        router.refresh();
       }
     } catch {
       setStatus("error");
