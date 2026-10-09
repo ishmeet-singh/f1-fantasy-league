@@ -2,11 +2,11 @@ name: season-cron
 
 on:
   schedule:
-    # One off-peak frequent schedule runs both time-sensitive jobs. GitHub can
-    # delay scheduled workflows; separate overlapping expressions previously
-    # caused delayed reminder runs to skip result sync entirely.
-    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
-    - cron: "17 */6 * * *"   # every 6 hours — sync calendar
+    # Reminders and result sync run from Supabase pg_cron every 5 minutes.
+    # GitHub's schedule trigger was creating those runs hours apart, while the
+    # jobs that did start finished in under a minute. Calendar sync and the
+    # FIA roster script stay here because they only need a few runs a day.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 jobs:
@@ -22,8 +22,8 @@ jobs:
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-      - name: Send reminder emails (every 5 minutes)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '2,7,12,17,22,27,32,37,42,47,52,57 * * * *' }}
+      - name: Send reminder emails (manual workflow only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \
@@ -32,8 +32,8 @@ jobs:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
-      - name: Call sync-results (every 5 minutes)
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '2,7,12,17,22,27,32,37,42,47,52,57 * * * *' }}
+      - name: Call sync-results (manual workflow only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           curl -fsS -X GET \
             -H "Authorization: Bearer $CRON_SECRET" \

@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 
-function getCronSecret() {
-  return process.env.CRON_SECRET;
+function acceptedCronSecrets(): string[] {
+  return [process.env.CRON_SECRET, process.env.SUPABASE_CRON_SECRET].filter(
+    (value): value is string => Boolean(value)
+  );
 }
 
 export function assertCronAuthorized(request: Request) {
-  const expected = getCronSecret();
-  if (!expected) {
+  const accepted = acceptedCronSecrets();
+  if (!accepted.length) {
     return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
   }
 
   const authHeader = request.headers.get("authorization");
   const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const headerSecret = request.headers.get("x-cron-secret");
+  const presented = bearer ?? headerSecret;
 
-  if (bearer === expected || headerSecret === expected) {
+  if (presented && accepted.includes(presented)) {
     return null;
   }
 

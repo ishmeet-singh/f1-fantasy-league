@@ -44,7 +44,19 @@ export function selectRacesQualiOnlyWindow<T extends ReminderRaceWeekend>(
 }
 
 export const REMINDER_INTERVALS_MINUTES = [48 * 60, 24 * 60, 12 * 60, 6 * 60, 3 * 60, 60, 5];
+/**
+ * Legacy narrow window. Kept so callers can see why a 90-minute check misses
+ * sprint: the scheduled workflow often lands hours late, and sprint is 4h before quali.
+ */
 export const REMINDER_MATCH_WINDOW_MINUTES = 90;
+/**
+ * Send a reminder up to 12h after its target time. GitHub's 5-minute schedule
+ * is landing about every 4–8h, and on sprint weekends the sprint session is
+ * 4h before qualifying — a run that catches quali has already missed a 90-minute
+ * sprint window. 12h still hands off before the next shorter interval (24h→12h)
+ * so a late run does not also re-send the older one.
+ */
+export const REMINDER_CATCHUP_MINUTES = 12 * 60;
 
 export function shouldSendReminderNow(
   sessionStart: string,
@@ -55,4 +67,30 @@ export function shouldSendReminderNow(
   const targetTime = sessionTime - intervalMinutes * 60 * 1000;
   const diffMinutes = (nowMs - targetTime) / 60000;
   return diffMinutes >= 0 && diffMinutes < REMINDER_MATCH_WINDOW_MINUTES;
+}
+
+/**
+ * One interval per session per cron run: the most recently elapsed reminder
+ * still inside the catch-up horizon. A quali-timed run can still send the
+ * sprint reminder from earlier the same morning, without also firing every
+ * older interval in that horizon.
+ */
+export function selectDueReminderInterval(
+  sessionStart: string,
+  nowMs: number,
+  catchupMinutes = REMINDER_CATCHUP_MINUTES
+): number | null {
+  const sessionTime = new Date(sessionStart).getTime();
+  if (!Number.isFinite(sessionTime) || sessionTime <= nowMs) return null;
+
+  let best: { intervalMinutes: number; diffMinutes: number } | null = null;
+  for (const intervalMinutes of REMINDER_INTERVALS_MINUTES) {
+    const targetTime = sessionTime - intervalMinutes * 60 * 1000;
+    const diffMinutes = (nowMs - targetTime) / 60000;
+    if (diffMinutes < 0 || diffMinutes >= catchupMinutes) continue;
+    if (!best || diffMinutes < best.diffMinutes) {
+      best = { intervalMinutes, diffMinutes };
+    }
+  }
+  return best?.intervalMinutes ?? null;
 }

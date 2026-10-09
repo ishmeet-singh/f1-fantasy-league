@@ -2,10 +2,9 @@ import { assertCronAuthorized } from "@/lib/cron-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendReminderEmail } from "@/lib/email";
 import {
-  REMINDER_INTERVALS_MINUTES,
   REMINDER_LOOKAHEAD_MS,
+  selectDueReminderInterval,
   selectRacesInReminderWindow,
-  shouldSendReminderNow,
   type ReminderRaceWeekend
 } from "@/lib/reminder-races";
 import { usersWithCompletePicks, userHasCompletePicks } from "@/lib/reminder-submission";
@@ -75,122 +74,122 @@ export async function GET(request: Request) {
       ? new Set(raceEntries.map((entry) => entry.driver_id))
       : undefined;
 
+    // Earlier session first. On sprint weekends sprint is before quali, and a
+    // single cron tick often owes both — send the sooner deadline first.
     const sessions: { eventType: EventType; start: string }[] = [
       { eventType: "quali", start: race.quali_start },
       ...(race.sprint_start
         ? [{ eventType: "sprint" as EventType, start: race.sprint_start }]
         : []),
       { eventType: "race", start: race.race_start }
-    ];
+    ].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
     for (const { eventType, start } of sessions) {
-      // Skip sessions that have already started
-      if (new Date(start) <= new Date()) continue;
+      if (new Date(start).getTime() <= nowMs) continue;
 
-      for (const intervalMins of REMINDER_INTERVALS_MINUTES) {
-        if (!shouldSendReminderNow(start, intervalMins, nowMs)) continue;
+      const intervalMins = selectDueReminderInterval(start, nowMs);
+      if (intervalMins == null) continue;
 
-        const label = intervalLabel(intervalMins);
+      const label = intervalLabel(intervalMins);
 
-        // Find users who have NOT submitted a complete pick set for this session
-        const { data: submitted, error: submittedError } = await supabase
-          .from("predictions")
-          .select("user_id,driver_id")
-          .eq("race_id", race.id)
-          .eq("event_type", eventType);
+      // Find users who have NOT submitted a complete pick set for this session
+      const { data: submitted, error: submittedError } = await supabase
+        .from("predictions")
+        .select("user_id,driver_id")
+        .eq("race_id", race.id)
+        .eq("event_type", eventType);
 
-        const submittedIds = usersWithCompletePicks(
-          submitted ?? [],
-          eventType,
-          eligibleDriverIds
+      const submittedIds = usersWithCompletePicks(
+        submitted ?? [],
+        eventType,
+        eligibleDriverIds
+      );
+      if (submittedError) {
+        console.error(
+          `Reminder submission query failed for ${race.id}/${eventType}:`,
+          submittedError
         );
-        if (submittedError) {
-          console.error(
-            `Reminder submission query failed for ${race.id}/${eventType}:`,
-            submittedError
+      }
+
+      // Find users who already got this reminder
+      const { data: alreadySent } = await supabase
+        .from("notification_log")
+        .select("user_id")
+        .eq("race_id", race.id)
+        .eq("event_type", eventType)
+        .eq("interval_label", label);
+
+      const alreadySentIds = new Set((alreadySent || []).map((r) => r.user_id));
+
+      const targets = allUsers.filter(
+        (u) => !submittedIds.has(u.id) && !alreadySentIds.has(u.id)
+      );
+      for (const user of targets) {
+        try {
+          // Re-check immediately before send (picks may have landed since the batch query).
+          const hasCompletePicks = await userHasCompletePicks(
+            supabase,
+            user.id,
+            race.id,
+            eventType,
+            eligibleDriverIds
           );
-        }
-
-        // Find users who already got this reminder
-        const { data: alreadySent } = await supabase
-          .from("notification_log")
-          .select("user_id")
-          .eq("race_id", race.id)
-          .eq("event_type", eventType)
-          .eq("interval_label", label);
-
-        const alreadySentIds = new Set((alreadySent || []).map((r) => r.user_id));
-
-        const targets = allUsers.filter(
-          (u) => !submittedIds.has(u.id) && !alreadySentIds.has(u.id)
-        );
-        for (const user of targets) {
-          try {
-            // Re-check immediately before send (picks may have landed since the batch query).
-            const hasCompletePicks = await userHasCompletePicks(
-              supabase,
-              user.id,
-              race.id,
-              eventType,
-              eligibleDriverIds
-            );
-            if (hasCompletePicks) {
-              skipped++;
-              continue;
-            }
-
-            // Claim the notification_log slot FIRST (before sending) to prevent race
-            // conditions where two concurrent cron runs both send the same reminder.
-            // The unique constraint on (user_id, race_id, event_type, interval_label)
-            // means only one run wins — the other gets a conflict error and skips.
-            const { error: claimError } = await supabase.from("notification_log").insert({
-              user_id: user.id,
-              race_id: race.id,
-              event_type: eventType,
-              interval_label: label
-            });
-            if (claimError) {
-              // Another concurrent run already claimed this slot — skip
-              skipped++;
-              continue;
-            }
-
-            // For reminders with < 1 h to go, generate a one-time magic link so the user
-            // is signed in automatically on click. For longer-horizon reminders the link
-            // would already have expired (Supabase default OTP expiry = 1 h), so we fall
-            // back to the plain /picks URL instead — users who are already logged in land
-            // straight on the picks page, others are prompted to sign in.
-            let picksLink = `${appUrl}/picks`;
-            if (intervalMins <= 60) {
-              const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-                type: "magiclink",
-                email: user.email,
-                options: {
-                  redirectTo: `${appUrl}/auth/callback?next=/picks`
-                }
-              });
-              if (linkError || !linkData?.properties?.action_link) {
-                console.warn(`Magic link generation failed for ${user.email}, using plain URL:`, linkError);
-              } else {
-                picksLink = linkData.properties.action_link;
-              }
-            }
-
-            await sendReminderEmail({
-              to: user.email,
-              name: user.display_name || user.email.split("@")[0],
-              raceName: race.grand_prix,
-              eventType,
-              minutesLeft: intervalMins,
-              picksLink,
-              isMagicLink: intervalMins <= 60
-            });
-
-            sent++;
-          } catch (err) {
-            console.error(`Reminder send failed for ${user.email}:`, err);
+          if (hasCompletePicks) {
             skipped++;
+            continue;
           }
+
+          // Claim the notification_log slot FIRST (before sending) to prevent race
+          // conditions where two concurrent cron runs both send the same reminder.
+          // The unique constraint on (user_id, race_id, event_type, interval_label)
+          // means only one run wins — the other gets a conflict error and skips.
+          const { error: claimError } = await supabase.from("notification_log").insert({
+            user_id: user.id,
+            race_id: race.id,
+            event_type: eventType,
+            interval_label: label
+          });
+          if (claimError) {
+            // Another concurrent run already claimed this slot — skip
+            skipped++;
+            continue;
+          }
+
+          // For reminders with < 1 h to go, generate a one-time magic link so the user
+          // is signed in automatically on click. For longer-horizon reminders the link
+          // would already have expired (Supabase default OTP expiry = 1 h), so we fall
+          // back to the plain /picks URL instead — users who are already logged in land
+          // straight on the picks page, others are prompted to sign in.
+          let picksLink = `${appUrl}/picks`;
+          if (intervalMins <= 60) {
+            const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+              type: "magiclink",
+              email: user.email,
+              options: {
+                redirectTo: `${appUrl}/auth/callback?next=/picks`
+              }
+            });
+            if (linkError || !linkData?.properties?.action_link) {
+              console.warn(`Magic link generation failed for ${user.email}, using plain URL:`, linkError);
+            } else {
+              picksLink = linkData.properties.action_link;
+            }
+          }
+
+          await sendReminderEmail({
+            to: user.email,
+            name: user.display_name || user.email.split("@")[0],
+            raceName: race.grand_prix,
+            eventType,
+            minutesLeft: intervalMins,
+            picksLink,
+            isMagicLink: intervalMins <= 60
+          });
+
+          sent++;
+        } catch (err) {
+          console.error(`Reminder send failed for ${user.email}:`, err);
+          skipped++;
         }
       }
     }
