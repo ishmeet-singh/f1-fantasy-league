@@ -79,10 +79,11 @@ export async function GET(request: Request) {
     const sessions: { eventType: EventType; start: string }[] = [
       { eventType: "quali", start: race.quali_start },
       ...(race.sprint_start
-        ? [{ eventType: "sprint" as EventType, start: race.sprint_start }]
+        ? [{ eventType: "sprint" as const, start: race.sprint_start }]
         : []),
       { eventType: "race", start: race.race_start }
-    ].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    ];
+    sessions.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
     for (const { eventType, start } of sessions) {
       if (new Date(start).getTime() <= nowMs) continue;
