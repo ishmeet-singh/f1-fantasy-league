@@ -8,9 +8,21 @@ describe("getMiddlewareAuthMode", () => {
     process.env = { ...env };
   });
 
-  it("defaults to network when unset", () => {
+  it("defaults to network when unset and no JWT secret", () => {
     delete process.env.MIDDLEWARE_AUTH;
     delete process.env.SUPABASE_JWT_SECRET;
+    expect(getMiddlewareAuthMode()).toBe("network");
+  });
+
+  it("defaults to local when JWT secret is set", () => {
+    delete process.env.MIDDLEWARE_AUTH;
+    process.env.SUPABASE_JWT_SECRET = "secret";
+    expect(getMiddlewareAuthMode()).toBe("local");
+  });
+
+  it("honors explicit network mode even with JWT secret", () => {
+    process.env.MIDDLEWARE_AUTH = "network";
+    process.env.SUPABASE_JWT_SECRET = "secret";
     expect(getMiddlewareAuthMode()).toBe("network");
   });
 

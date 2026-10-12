@@ -49,14 +49,38 @@ function toAuthUser(user: { id: string; email?: string | null }): MiddlewareAuth
   return { id: user.id, email: user.email ?? "" };
 }
 
+const MIDDLEWARE_AUTH_TIMEOUT_MS = 4_000;
+
+async function withAuthTimeout<T>(
+  label: string,
+  operation: () => Promise<T>
+): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`[middleware] ${label} timed out after ${MIDDLEWARE_AUTH_TIMEOUT_MS}ms`);
+          resolve(null);
+        }, MIDDLEWARE_AUTH_TIMEOUT_MS);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function authenticateNetwork(
   request: NextRequest,
   requestHeaders: Headers
 ): Promise<MiddlewareAuthResult> {
   const { supabase, getResponse } = createMiddlewareSupabase(request, requestHeaders);
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const result = await withAuthTimeout("supabase.auth.getUser", () => supabase.auth.getUser());
+  if (!result) {
+    return { user: null, supabaseResponse: getResponse() };
+  }
+  const { data: { user } } = result;
   return {
     user: user ? toAuthUser(user) : null,
     supabaseResponse: getResponse()
@@ -80,13 +104,13 @@ async function authenticateLocal(
   let verified = await verifyAccessToken(session.access_token, jwtSecret);
 
   if (!verified && session.refresh_token) {
-    const { data, error } = await supabase.auth.refreshSession({
-      refresh_token: session.refresh_token
-    });
-    if (!error && data.session?.access_token) {
-      verified = await verifyAccessToken(data.session.access_token, jwtSecret);
-      if (!verified && data.user) {
-        verified = { id: data.user.id, email: data.user.email ?? "" };
+    const refreshed = await withAuthTimeout("supabase.auth.refreshSession", () =>
+      supabase.auth.refreshSession({ refresh_token: session.refresh_token })
+    );
+    if (refreshed && !refreshed.error && refreshed.data.session?.access_token) {
+      verified = await verifyAccessToken(refreshed.data.session.access_token, jwtSecret);
+      if (!verified && refreshed.data.user) {
+        verified = { id: refreshed.data.user.id, email: refreshed.data.user.email ?? "" };
       }
     }
   }
