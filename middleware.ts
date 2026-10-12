@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authenticateMiddlewareRequest } from "@/lib/auth/middleware-auth";
+import { hasSupabaseSessionCookie } from "@/lib/auth/middleware-session-cookie";
 import {
   isAdminApi,
   isProtectedApi,
@@ -37,6 +38,18 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   const pathname = request.nextUrl.pathname;
 
+  if (!hasSupabaseSessionCookie(request)) {
+    if (isProtectedPage(pathname)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.next();
+  }
+
   const { user, supabaseResponse } = await authenticateMiddlewareRequest(request, requestHeaders);
 
   if (!user && isProtectedPage(pathname)) {
@@ -73,6 +86,7 @@ export const config = {
     "/rules/:path*",
     "/api/profile/:path*",
     "/api/picks",
+    "/api/events",
     "/api/admin/:path*"
   ]
 };

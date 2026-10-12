@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getMiddlewareAuthMode } from "@/lib/auth/middleware-auth-mode";
+import { readSessionTokensFromRequest } from "@/lib/auth/middleware-session-cookie";
 import { verifyAccessToken } from "@/lib/auth/verify-access-token";
 
 export type MiddlewareAuthUser = {
@@ -93,9 +94,7 @@ async function authenticateLocal(
 ): Promise<MiddlewareAuthResult> {
   const jwtSecret = process.env.SUPABASE_JWT_SECRET!;
   const { supabase, getResponse } = createMiddlewareSupabase(request, requestHeaders);
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
+  const session = readSessionTokensFromRequest(request);
 
   if (!session?.access_token) {
     return { user: null, supabaseResponse: getResponse() };
@@ -105,7 +104,7 @@ async function authenticateLocal(
 
   if (!verified && session.refresh_token) {
     const refreshed = await withAuthTimeout("supabase.auth.refreshSession", () =>
-      supabase.auth.refreshSession({ refresh_token: session.refresh_token })
+      supabase.auth.refreshSession({ refresh_token: session.refresh_token! })
     );
     if (refreshed && !refreshed.error && refreshed.data.session?.access_token) {
       verified = await verifyAccessToken(refreshed.data.session.access_token, jwtSecret);
@@ -125,8 +124,14 @@ export async function authenticateMiddlewareRequest(
   request: NextRequest,
   requestHeaders: Headers
 ): Promise<MiddlewareAuthResult> {
-  if (getMiddlewareAuthMode() === "local") {
-    return authenticateLocal(request, requestHeaders);
-  }
-  return authenticateNetwork(request, requestHeaders);
+  const mode = getMiddlewareAuthMode();
+  const result = await withAuthTimeout(`authenticate.${mode}`, () =>
+    mode === "local"
+      ? authenticateLocal(request, requestHeaders)
+      : authenticateNetwork(request, requestHeaders)
+  );
+  if (result) return result;
+
+  const { getResponse } = createMiddlewareSupabase(request, requestHeaders);
+  return { user: null, supabaseResponse: getResponse() };
 }
