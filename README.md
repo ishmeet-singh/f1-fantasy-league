@@ -145,7 +145,7 @@ A GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 
 ## Cron setup (free tier)
 Configured in `.github/workflows/season-cron.yml`:
-- `/api/cron/sync-results` and `/api/cron/send-reminders` on the frequent schedule (about every 5 minutes; GitHub Actions timing is best effort)
+- `/api/cron/sync-results` and `/api/cron/send-reminders` via Supabase `pg_cron` every 15 minutes (staggered by 2 minutes)
 - `/api/cron/sync-calendar` every 6 hours
 
 Targeted score repair is available through `.github/workflows/score-repair.yml` and from the Admin screen. Full-season recomputation is not scheduled.

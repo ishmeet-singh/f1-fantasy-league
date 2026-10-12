@@ -2,7 +2,7 @@ name: season-cron
 
 on:
   schedule:
-    # Reminders and result sync run from Supabase pg_cron every 5 minutes.
+    # Reminders and result sync run from Supabase pg_cron every 15 minutes.
     # GitHub's schedule trigger was creating those runs hours apart, while the
     # jobs that did start finished in under a minute. Calendar sync and the
     # FIA roster script stay here because they only need a few runs a day.
